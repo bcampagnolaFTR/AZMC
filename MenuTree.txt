@@ -1,0 +1,80 @@
+
+		1) Log Files & Reports
+			a) Enable Logging
+				1) Enable
+				2) Disable
+			b) Log Depth 
+				1) Broad vs. Detailed 	- Broadly defined actions (e.g. Range based commands) vs. all granular actions 
+				2) Debug On/Off 		- Try/catch error messages
+				3) User Monitor On/Off 	- Tracks all user actions 
+			c) Log File Name & Path
+				1) Set File Name 			[ --autoUpdateFullFileLocation --default ]
+				2) Set Path 				[ --autoUpdateFullFileLocation --default ]
+				3) Set Full File Location 	[ --trickleDown --fileBrowser --default ]
+			d) DateTime Format
+				1) ms Epoch, year 2000
+				2) YYYYMMDD HH:MM:SS.mmm
+				3) HH:MM:SS.mmm YYYYMMDD
+				4) Month DD, YYYY HH:MM:SS 
+			e) Generate Reports [ --autoSaveToLogFile --autoSaveToNewReportFile [--lineNum[] | --roomName[]] ]
+				1) Firmware Versions
+				2) File Versions
+				3) AV Device Ping
+				4) IP Table Offline Devices
+				5) Processor Error Logs
+			f) Filter & Manage Report Data
+				1) Show All
+				2) Show Notices		- 	Show imperfect reports & errors
+				3) Show Erroneous	- 	Show only errors, such as offline devices, processor plog errors, etc 
+										(stuff requiring action)
+				4) Send To Log File 	[ --all --active --byType[1|2|3|4]]
+										the options dictate which reports to save
+				5) Send To Report Files [ --all --active --byType[1|2|3|4]]
+
+		2) Spreadsheet
+			a) File Name, Path, & Type
+				1) Set File Name [ --autoUpdateFullFileLocation --default ]
+				2) Set Path [ --autoUpdateFullFileLocation --default ]
+				3) Set Type [ --autoSetByFileName --autoUpdateFullFileLocation --default(.csv) ]
+				4) Set Full Location [ --byFileBrowserSelect --trickleDown]
+			b) Import File
+				1) Import File Rite Meow
+				2) Get Err From Most Recent Import
+			c) Error Check Data
+				1) Check For Duplicate IPs
+				2) Check For Bad IPs
+				3) Check For Duplicate RoomNames
+				4) Check For Bad RoomNames - e.g. numeric-only RoomNames are not allowed
+			d) Comment Mode
+				1) Auto-Write Line Comments To File
+				2) Any Value Blocks - If there is any value, group actions ignore this line. "" Emptystring is the only pass.
+				3) 6-Bits per Device - [ [Set|Get][Auth/SSL, IPT, Code][Proc, Panel[]] ] 
+			e) Get Data
+				1) All
+				2) Row[ [nn] [$Name] [nn-nn] [$Name-$Name] ]
+				3) Col[ [nn] [$Name] [nn-nn] [$Name-$Name] ]
+				4) RowCol [ [nn] [$Name] [nn-nn] [$Name-$Name] ][ [nn] [$Name] [nn-nn] [$Name-$Name] ]
+			f) Set Data
+				1) RowCol value [ [nn] [$Name] [nn-nn] [$Name-$Name] ][ [nn] [$Name] [nn-nn] [$Name-$Name] ]
+				2) All Column value [ --columnName ]
+			g) Expected Table Structure
+				1) Show
+
+		3) Device Config  [ --Proc --Panel[] [--rowNum[] | --roomName[]] ]
+			a) Authentication
+				1) Set On 		[ --$user --$pass --supressReboot ]
+				2) Set Off		[ --supressReboot ]
+			b) SSL
+				1) Set On 		[ --supressReboot]
+				2) Set Off 		[ --supressReboot] 
+			c) Code Files
+				1) Send If Behind 	[ --force(ignore revision, send anyway) --SendDefaultIPTable ]
+			d) IP Table
+				1) Print [ --supressReboot ] 
+				2) Send [ --supressReboot ] 
+			e) Firmware
+				1) Send If Behind [ --force(ignore revision, send anyway) ]
+
+		4) Script Settings
+			a) Clear Window On Menu Change
+			b) List Split  [ --default('~') ]

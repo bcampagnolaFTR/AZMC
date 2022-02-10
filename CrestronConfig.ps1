@@ -18,15 +18,15 @@
 
 
 
-$DEBUG = $true
+$global:DEBUG = $true
 
-$User = "ftr_admin"
-$Pass = "Fortherecord123!"
+$global:User = "ftr_admin"
+$global:Pass = "Fortherecord123!"
 
 # This value needs to be copied while the script is running. It doesn't work if you run the script, and then try to reference the value from console
-$ScriptPath = $PSScriptRoot + '\'
-$DataFileName = "AZMC_CourtroomData.csv"
-
+$global:ScriptPath = $PSScriptRoot + '\'
+$global:DataFileName = "AZMC_CourtroomData.csv"
+$global:SelectedFile = ""
 
 Write-Host -ForegroundColor Cyan @"
 
@@ -35,7 +35,7 @@ FTR's Magic Crestron Configuration Script
 "@
 
 # MyShell
-Write-Host -ForegroundColor Yellow "Hi!`nI'm Jonks, your friendly neighborhood PowerShell script.`nI'll be your guide today.`n`n`n"
+Write-Host -ForegroundColor Yellow "Hi!`nI'm Jonks, your friendly neighborhood PowerShell script.`n`n`n"
 
 
 function fatal
@@ -339,8 +339,8 @@ class Courtroom
 
 
 # Import Device Data
-$rooms = @{}
-$roomsByName = @{}
+#$global:rooms = @{}
+#$global:roomsByName = @{}
 
 
 function importFile([string]$fileName)
@@ -358,7 +358,9 @@ function importFile([string]$fileName)
         return ""
     }
 
-    #$rooms = @{}
+    $global:rooms = @{}
+    $global:roomsByName = @{}
+
     $i = 1
     foreach($row in $sheet)
     {
@@ -406,8 +408,8 @@ function importFile([string]$fileName)
         $c.PTZCam_IP = $row | Select-Object -ExpandProperty IP_PTZCams 
         $c.PTZCam_IP = $c.PTZCam_IP[0].split('~')
 
-        $rooms.Add($c.Index, $c)
-        $roomsByName.Add($c.RoomName, $rooms[$c.Index])
+        $rooms[$c.Index] = $c
+        $roomsByName[$c.RoomName] = $rooms[$c.Index]
     }
 }
 
