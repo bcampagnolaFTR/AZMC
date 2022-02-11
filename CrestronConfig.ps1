@@ -146,7 +146,33 @@ if($err -ne 0)
 }
 
 
+# Init Menu
 
+class Menu
+{
+    $L1 = @(  "`t1) Log Files & Reports`n" + 
+              "`t2) Spreadsheet`n" +
+              "`t3) Device Config`n" + 
+              "`t4) Script Settings"   )
+
+    $L2_1 = @( 
+                )
+    $L2_2 = @( 
+                )
+    $L2_3 = @( 
+                )
+    $L2_4 = @( 
+                )
+    $L2_5 = @( 
+                )
+
+
+}
+
+function menu
+{
+    $menu
+}
 
 
 
@@ -331,8 +357,6 @@ class Courtroom
     [string]$Audicue_IP
     [string[]]$PTZCam_IP
 
-    [int]$IPID
-
 }
 
 
@@ -348,8 +372,8 @@ function importFile([string]$fileName)
    
     if([System.IO.File]::Exists("$fileName"))
     {
-        $sheet = Import-csv $fileName
-        $sheetLen = $sheet | Measure-Object
+        $global:sheet = Import-csv $fileName
+        $sheetLen = $sheet | Measure-Object | Select-Object -ExpandProperty Count
         Write-Host -ForegroundColor Yellow ("Ok, I imported the file $fileName.`nThere are $sheetLen rooms in the list.`n`n")
     }
     else

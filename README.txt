@@ -7,7 +7,7 @@ For The Record
 
 
 Hello! 
-Welcome to the AZMC Crestron Powershell configuration guide.
+Welcome to the AZMC Crestron configuration guide.
 
 
 
@@ -19,10 +19,12 @@ What information does this document cover?
 1. Understanding how and why the AZMC Crestron programming and setup process is different
 2. The files, structures, and file management
 3. How to set up Powershell on your PC to run the script
-4. How to operate the script and configure the spreadsheet
+4a. How to configure the spreadsheet
+4b. How to operate the script
 5. How to configure the Crestron processors
 6. How to configure the Crestron panels
-7. Troubleshooting
+7. Setting the System Configuration variables
+8. Troubleshooting
 
 
 
@@ -33,7 +35,8 @@ What information does this document cover?
 	To my knowledge, in all previous systems installed by FTR, each courtroom would get a unique copy of the Crestron code.
 	This seems reasonable, as Crestron code generally uses details that are specific to each room.
 	e.g. IP addresses of AV hardware, the number of cameras, the number of mics, etc.
-		The Crestron processors need these varying details in order to function properly in each room, thus the unique Crestron programs also need to vary in this manner.
+		The Crestron processors need these varying details in order to function properly in each room, thus the unique Crestron 
+		programs also need to vary in this manner.
 
 	We are contracted to install AV/recording systems in 230+ rooms for Maricopa County (AZMC). 
 	Using the previous code deployment strategy, we would end this project with 230+ unique copies of the Crestron code.
@@ -70,8 +73,9 @@ What information does this document cover?
 		quanitities of things.
 
 	Q: But how do the rooms work if we don't include the room details in the code??
-		We add the room details to a spreadsheet, and apply these details to each room via a scripting language.
-		Thus, we then have ONE working copy of code, and a big spreadsheet containing data on the variances between each room.
+		We add the room details to a spreadsheet, and apply these details to each room via a scripting language, from outside the
+		Crestron code.
+		Thus, we then have ONE working copy of code, and ONE big spreadsheet containing data on the variances between each room.
 
 			1x code file 						  1x spreadsheet
 	[	All-in-one Crestron Code 	]   +   [	Room.001 details 	]
@@ -82,26 +86,38 @@ What information does this document cover?
 
 	Crestron has a scripting language - Toolbox Script Manager. It is a bit of a relic, with much of it today being 
 		non-functional. We can get it to work for us here, but the time has come to move on from the 1990s.
+
 	We will instead use Windows PowerShell.
+	Using PowerShell is slightly worse in that it is less portable and accessible than Crestron Toolbox.
+	Everyone has Toolbox, and it is easy to use. PowerShell is slightly more difficult to use, but is infinitely more
+		stable and powerful.
+
 
 
 	Q: 1 Code file + 1 Spreadsheet? This is amazing!! Why have we not done this with EVERY Crestron program, EVER!?? 
 		Well, as with everything, there's a trade-off.
 		Configuring Crestron hardware and loading code is pretty simple stuff, right? 
-		Well, we just made these processes about 4x more complex and technically demanding by introducing PowerShell into the mix.
+		Well, we just made these processes about 3x more complex and technically demanding by introducing PowerShell
+			into the mix.
 
-		Once this methodology of code "abstraction" is in place, we can't go back to using Toolbox.
-		Anyone who works on the AZMC systems will need to be trained on the new processes, including how to use PowerShell and
-			the courtroom data spreadsheet. 
+		Once this methodology of code "abstraction" is in place, we don't really want to go back to using Toolbox for loading.
+		We want to stick to PowerShell, which means that whomever is on-site, or working on these rooms remotely needs to
+			have the latest PS script and data spreadsheet. 
+			We CAN, technically, go back to Toolbox, but we would really need to be sure that we don't ever "Send Default IP Table" 
+			after we have configured with PowerShell. 
+			Inevitably, it happens every couple of months - someone accidentally sends the Default IP
+			Table with a .lpz update, and then they are left scrambling to find the script to rebuild the broken IP table.
+		Bottom line - anyone who works on the AZMC systems will need to be trained on the new processes, including how to 
+			use PowerShell and the courtroom data spreadsheet. 
 
 		With proper documentation (like this README!) and perhaps a training session or two, we will tame the beast and
-			save ourselves a gajillion man-hours.
+			reap the long-term benefits of this different approach.
 
 	Q: Is this new process just for the Maricopa County (AZMC) project?
 		No. 
 		- The new process has already been retroactively deployed to the 48 King County (KCCH) courtrooms.
 		- It may be retroactively deployed to a few other existing clients.
-		- And it will likely be deployed to all future projects, at least for the next 1-2 years, while we build an automated
+		- And it will likely be deployed to all future projects, at least for the next 1-2 years, while we build a
 			web service that manages all this stuff automatically.
 
 
@@ -118,7 +134,7 @@ What information does this document cover?
 		In engineering this the first time through, I had a ton of issues storing all the files in a synchronized 
 			OneDrive folder. It might be possible to make it work better, but it hardly seems worth the extra effort to me.
 		So, to alleviate this issue without question, please pick a destination folder on your computer that is NOT part
-			of a synchronized back-up service.
+			of a synchronized back-up service, and in particular, not in a OneDrive folder.
 		If you are using github to clone (copy) and maintain the files we are dealing with, this is even more reason
 			not to put them in a synchronized directory.
 
@@ -131,7 +147,7 @@ What information does this document cover?
 			</tangent>
 
 
-		Tangent#2: Are you git saavy?
+		Tangent#2: Are you git saavy? (github)
 		You probably should be. Github is the most widely used version control software (VCS), and it is incredibly useful
 			when a group of people are working on the same set of files.
 		As the name would depict, version control software is used for managing programs with many versions, and many 
@@ -140,21 +156,22 @@ What information does this document cover?
 			because the VCS manages the version numbers for you. All you need to know is "am I up-to-date with the group"?
 		If we spot any files listed below that do not already have version numbers in the name - this is why!
 		Also, because it is 2022, we can marvel at the awesome power of the VCS, and how it allows multiple people to
-			simultaneously modify a given file without any fear of anyone's work getting overwritten.
+			simultaneously modify a file without fear of anyone's work getting overwritten.
 
-		But, I realize this is already a heavy endeavor for some, so I'll leave it at this: if you want to learn more
-			about github and VCS, I will post some online resources to the group. We could also do a training session 
-			dedicated just to git.
+		But, I realize this whole PowerShell bit is already a heavy endeavor for some, so I'll leave it at this: if you 
+			want to learn more about github and VCS, I will post some online resources to the group. We could also do 
+			a training session dedicated just to git.
+			</tangent2>
 
 
 	The files:
 	AZMC_v3.02.01.lpz			-	the latest Crestron compiled code at the time of writing this document. This file 
 									will be	installed into all of the processors in the Maricopa County courtrooms.
 
-	AZMC_TSW1060_v3.02.01.vtz 	- 	like the .lpz file, there is a single .vtz file that gets installed into every touch
-									panel in the project.   	
+	AZMC_TSW1060_v3.02.01.vtz 	- 	like the .lpz file, there is a single .vtz file that gets installed into all touch
+									panels in the project.   	
 
-	AZMC_CourtroomData.csv 		- 	the spreadsheet containing all of the varying room details. Each courtroom gets
+	AZMC_CourtroomData.csv 		- 	the spreadsheet containing some of the varying room details. Each courtroom gets
 									one line in the spreadsheet. Any hardware devices that are specified in multiples
 									will be listed in the same column, separated by a tilda (~).
 									e.g. in our test setup in Boston, there are 4 fixed cameras, with node IP addresses
@@ -162,7 +179,7 @@ What information does this document cover?
 										and in this case it is populated with the data: "20~21~22~23"
 
 	CrestronConfig.ps1 			-	the PowerShell script. This file will automatically take the data in the spreadsheet,
-									and configure the Crestron hardware with the appropriate data. The script will also
+									and configure the Crestron hardware appropriately. The script will also
 									do firmware, logging, generate reports, and will enable you to update code all 230 
 									rooms with a single button-press. $$$
 
@@ -190,7 +207,7 @@ What information does this document cover?
 		Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 
 	You should get a popup asking to confirm that you want to proceed. Just click 'Yes'.
-	We will need to enter this command every time we want to run our script.
+	We will need to enter this command every time we open PowerShell to run our script.
 	(Once we have a public security certificate, this command will not be necessary, but that may take some time.)
 
 
@@ -208,7 +225,7 @@ What information does this document cover?
 					...becomes...
 					PS C:\Users\BenCampagnola\repos\AZMC>
 
-		- Entering only a backslash will take us back to the root directory.
+		- Entering  'cd \'  will take us back to the root directory.
 		e.g.		PS C:\Users\BenCampagnola>  cd \[enter]
 					...becomes...
 					PS C:\>
@@ -271,7 +288,7 @@ What information does this document cover?
 
 	Note that some of the items listed are prefixed with a '-', and some with a '*'. 
 	'-' : Indicates columns that expect a single value.
-	'*' : Indicates columns that can take multiple values - one per device.
+	'*' : Indicates columns that can take multiple values - one value per device.
 
 		Ignore_Line:	this is a data field used to determine which rooms have been loaded, and which have yet to be.
 						In general, you shouldn't need to mess with this column. The script will read from and write to
@@ -323,6 +340,10 @@ What information does this document cover?
 
 						Clear as mud? Good.
 
+
+						Alternatively, you can leave the subnet_address field blank, and just populate the full IP address
+						into each device's appropriate column.
+
 	 	Processor_IP: 	this is a single-value column, as each courtroom will have exactly 1 Crestron processor.
 		
 	 	FileName_LPZ:	this column accepts a single file name, with extension.
@@ -331,21 +352,19 @@ What information does this document cover?
 		Panel_IP: 		this is a multi-value column, as some courtrooms will have 1 touch panel, and others will have 2.
 						Separate multiples with a tilda (~)
 						e.g.  125~126
-						This value specifies that there are 2 panels in this room, and that their IP node addresses are
+						This value specifies that there are 2 panels in this room, and that their IP addresses end in
 						125 and 126, respectively.
-						(when added to the Subnet_Address of their room, their addresses would be something like:
-						10.218.116.125
-						10.218.116.126	)
 
 		FileName_VTZ:	this column CAN accept multiple touch panel files. However, the expectation right now is that
 						only one value will be entered here. I am expecting to load the same .vtz file to all panels. 
 						In the case	that something unexpected happens, such as where the graphics fail to scale properly 
 						on a smaller touch panel, we have the option of adding a 2nd .vtz file to this column in the 
-						spreadsheet. Otherwise, the single .vtz file will be sent to multiple touch panels in some courtrooms.
+						spreadsheet. Otherwise, the single .vtz file will be sent to multiple touch panels in the courtrooms
+						with 2 panels.
 
 		IP_DeviceType:	the remaining columns all have the convention "IP_DeviceType", indicating that these are the IP 
 						addresses for the devices.
-						Again, this is just the node IP address, meaning the part of the whole IP address other than
+						Again, this is just the node IP address, meaning the part of the whole IP address that is not
 							the Subnet_Address.
 						For any multiples, you know what to do! (but I'll say it anyway)
 						Just add a tilda (~) between the values.
@@ -354,8 +373,9 @@ What information does this document cover?
 						
 
 	That's about it!
-	Do not leave any stray text characters or comments anywhere on this document. The program is expecting it to be of a
-		very specific size and shape.
+	Do not leave any stray text characters or comments anywhere in the spreadsheet. This will throw off the script.
+
+
 
 
 4b. How to operate the script:
@@ -475,14 +495,14 @@ What information does this document cover?
 
 5. How to configure the Crestron processors:
 	
-	Once the network settings have been set on the Crestron processors, I believe the rest of the configuration can be 
-		completed through the script (if desired).
+	Once the network settings have been set on the Crestron processors (manually), I believe the rest of the 
+		configuration can be completed through the script (if desired).
 	These config bullet items include:
 		1. Setting authentication to ON, using standard FTR credentials
 		2. Setting SSL to ON
-		3. Sending the .lpz program with the default IP Table (approx. half of the IP Table info is still built into 
+		3. Sending the .lpz program WITH the default IP Table (approx. half of the IP Table info is still built into 
 			the program...)
-		4. Setting the variable IP Table 	(...and the other half is populated via the spreadsheet & script)
+		4. Setting the variable IP Table entries 	(...and the other half is populated via the spreadsheet & script)
 		5. Loading firmware
 
 	Note: The order of bulletpoints 3 & 4 is critical:
@@ -500,14 +520,111 @@ What information does this document cover?
 
 
 
-
 6. How to configure the Crestron panels:
+	
+	The touch panels have roughly the same configuration steps as the processors:
+		1. Setting auth to ON
+		2. Setting SSL to ON
+		3. Sending the .vtz file
+		4. Setting the IP Table
+		5. Loading firmware
+
+	There are no technical requirements dictating the order of these steps. 
+	They can happen in whichever order is most convenient.
 
 
 
 
 
-7. Troubleshooting:
+
+
+7. Setting the System Configuration variables:
+
+	In the previous versions of the AZMC code, and in many other FTR-installed systems, there is a folder in the SIMPL Windows 
+	program titled "System Configuration". This folder contained the logic programming that specified many of the room-specific 
+	details, such as the total number of microphones, how the displays were controlled, video streaming & routing settings, 
+	local device names, etc.
+
+	Fast forward to now - all of the programming formerly found in the "System Configuration" folder is now bulit into
+	the touch panel interface. We can call it the "config page". 
+	Ok fine, I'll call it the "config page", and you can call it whatever you want. Be that way.
+
+	By pressing and for 5 seconds holding the ForTheRecord logo at the top-center of the interface, we are magically 
+	whisked away to the Config Page. There are 9 "Subpages" built into the Config Page, each of which can be selected
+	from the list on the left. The subpages are:
+		- Comms
+		- Cams
+		- Devices
+		- HDMI Inputs
+		- Video
+		- DSP
+		- Mutes
+		- Mute Groups
+		- Rooms
+
+	I'll cover the 1st subpage here for now. 
+
+	Subpage01, Comms: 	- 	These controls are for the small group of IP address & MAC address information that could not be
+							built into the spreadsheet & script.
+
+							Q: Why not??
+								The modules inside the Crestron SIMPL Windows program that drive these devices - the Biamp 
+								and Cynap - utilize Crestron's C# programming environment. Crestron C# modules do not use
+								the processor's IP Table to make IP socket connections, rather they take a different path to 
+								the Ethernet port altogether. This "different path" cannot be hacked from outside of the
+								program using scripting languages like we are doing to the IP Table with PowerShell. The 
+								socket connection settings for these C# modules MUST be configured from within the program.
+
+								So, that leaves about 3 options for keeping the data OUT of the SIMPL Windows source code,
+								but being able to enter the data INTO the program, as the C# modules require, and I went with
+								what I found to be the best method.
+
+							The data that is entered into the Config Page and subpages is stored into NonVolatile RAM on 
+							the processor, which means that when there's a power outage, or we need to reset the program, 
+							it will still remember the settings we put in when it comes back online.
+
+
+							On the top of the Config Page are 2x important buttons:
+							- Default Settings
+							- Restart Program
+
+							Procedure:
+							After entering the appropriate data into the Comms subpage (4 different parameters), you should
+							should press each of the 3 "commit-->" buttons on the page, from top to bottom. Then, press the
+							Restart Program button once. 
+
+							Note: This is the only time we will need to restart the program. The other 8 pages of settings
+							are all applied immediately to the program any time the values change, including checkboxes,
+							numeric + \ - controls, and the text string input boxes.
+
+
+							When the program restarts, you can try out the "Default Settings" button.
+							Press the button while you are on subpages 2 thru 9, and the settings for that page will be
+							populated with what Jaime believes to be the "most common" settings across the different rooms.
+							If you hold the button down for > 5seconds, and then release the button, all controls on 
+							subpages 2-9 will be set to "Default" configuration.
+
+							^^ This is an excellent starting point for almost all rooms. 
+
+
+							Once you have gone through the subpages 2-9 and confirmed the settings to match actual room
+							configuration, you can exit the Config Page... 
+
+
+							...and then we're all done! 
+							Does it work?? 
+
+
+							Q: Why is the DSP IP_Address entered in the Config Page, but it also shows up in the spreadsheet?
+							A: The SIMPL Windows program does actually use the IP Table sockets to connect to the DSP,
+								but only for an online-status indicator. The DSP device control is sent via C# module.
+
+
+
+
+
+
+8. Troubleshooting:
 
 	- General:
 		I had a number of issues dealing with synchronized OneDrive folders causing the script to behave in odd ways.
@@ -526,6 +643,33 @@ What information does this document cover?
 		If you see any error messages popping up in the PowerShell window, or anywhere else, please attempt to copy them 
 			into the email.
 	- 
+
+
+	- Config Page
+		DSP connectivity - 
+			You can check to see if the processor is connecting to the DSP via a few different Toolbox Console / Telnet
+			commands.
+
+				who
+			.. provides a list of the external IP addresses that the processor is connected to.
+
+				netstat
+			.. is akin to  cmd> ipconfig /all (if I remember correctly)
+
+				ipt -t
+			..shows the IP table and connection statuses
+
+
+			Be sure that you can ping the DSP from the processor's Toolbox Console window. (yes, it does Ping)
+
+			Be sure to set the DSP connection type to the appropriate setting - either TCP or SSH - in BOTH the processor
+				and the DSP.
+			Be sure the IP address is entered correctly.
+			Press the DSP_IP_Address "Commit -->" button once.
+			Press the Program Restart button once (and wait for it to come back online).
+
+			Do NOT press the DSP "Commit-->" button again.
+
 
 
 
