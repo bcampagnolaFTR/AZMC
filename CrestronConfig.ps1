@@ -27,6 +27,14 @@ $global:Pass = "Fortherecord123!"
 $global:ScriptPath = $PSScriptRoot + '\'
 $global:DataFileName = "AZMC_CourtroomData.csv"
 $global:SelectedFile = ""
+$global:FileLoaded = $false
+$global:NumOfRooms = 0
+
+$global:Shell01 = "" 
+$global:Shell02 = ""
+$global:Shell03 = ""
+$global:Shell03Len = 30
+
 
 Write-Host -ForegroundColor Cyan @"
 
@@ -35,6 +43,15 @@ FTR's Magic Crestron Configuration Script
 "@
 
 # MyShell
+
+
+function fClear($ms = 100)
+{
+    clear
+    start-sleep -Milliseconds 100
+}
+
+fClear
 Write-Host -ForegroundColor Yellow "Hi!`nI'm Jonks, your friendly neighborhood PowerShell script.`n`n`n"
 
 
@@ -43,7 +60,9 @@ function fatal
     Read-Host -Prompt "`n`nPress any key to exit"
     exit
 }
+
 # Error handling
+
 function err([string]$err)
 {
     Write-Host $err
@@ -135,7 +154,7 @@ if($err -ne 0)
     }
     else
     {
-        erre 2
+        err 2
     }
 
     $err = tryImport
@@ -145,197 +164,10 @@ if($err -ne 0)
     }
 }
 
+#####################################################################################################################
+#####################################################################################################################
+#####################################################################################################################
 
-# Init Menu
-
-class Menu
-{
-    $L1 = @(  "`t1) Log Files & Reports`n" + 
-              "`t2) Spreadsheet`n" +
-              "`t3) Device Config`n" + 
-              "`t4) Script Settings"   )
-
-    $L2_1 = @( 
-                )
-    $L2_2 = @( 
-                )
-    $L2_3 = @( 
-                )
-    $L2_4 = @( 
-                )
-    $L2_5 = @( 
-                )
-
-
-}
-
-function menu
-{
-    $menu
-}
-
-
-
-# Stopwatch Feature
-$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-
-# Object for Results Data
-$DeviceResultsData = @() | Out-GridView -Title "Device Status Results"
-
-
-
-
-function ProcessorConfig([string]$ProcIP, [string[]]$AVBEntry, [string]$LPZPath, [string]$WyreIP)
-{
-    try
-    {
-        # Clear Connect Error
-        $ConnectError = " "
-
-        # Clear Status
-        $Status = " "
-        
-        # New Data Object
-        $DeviceResultItem = New-Object PSObject
-        Write-Host -f Green "Proc Config Setup for: $ProcIP"
-        
-        # Connect to Device via SSH
-        $SessionID = Open-CrestronSession -Device $ProcIP -Secure -Username $User -Password $Pass -ErrorAction SilentlyContinue
-
-        # Hostname
-        $hostnameResponce = Invoke-CrestronSession $SessionID "hostname"
-        $deviceHostname = [regex]::Match($hostnameResponce, "(?<=Host\sName:\s)[\w-]+").value
-        Write-Host -f Green "Working on => $deviceHostname`n`n`n`n"
-        
-        # Send Crestron Program to Processor
-        Send-CrestronProgram -ShowProgress -Device $ProcIP -LocalFile $LPZPath -Secure -Username $User -Password $Pass
-
-        # Configure Processor IP Tabele
-        
-        Invoke-CrestronSession $SessionID -Command "AddP 11 $WyreIP"
-        $IPID = 0x30
-        foreach ($AVBIP in $AVBEntry)
-        {
-            $AddPeer = "AddP {0:X} {1}" -f $IPID, $AVBIP
-            Invoke-CrestronSession $SessionID -Command "$AddPeer"
-            $IPID += 1
-        }
-    
-        # Reset Program
-        Invoke-CrestronSession $SessionID 'progreset -p:01'
-        
-        # Close Session
-        Close-CrestronSession $SessionID
-        
-        #Status to Log and Console
-        $Status = "Processor Config Success"
-        Write-Host -ForegroundColor Green "`n - Processor Config Success`n`n`n`n"
-      
-    }
-
-    catch
-    {
-        $deviceHostname = " "
-        $ConnectError = "Connection Attempts Unsuccessful"
-        Write-Host -f Red "`n $d - Unable to Configure Processor`n`n`n`n"
-    }
-
-    #Current Date/Time
-    $time = (get-date)
-    #Build Table
-    # Table Coulumn 1 - Time
-    $DeviceResultItem | Add-Member -Name "Time" -MemberType NoteProperty -Value $time
-    # Table Coulumn 2 - IP Address
-    $DeviceResultItem | Add-Member -Name "IP Address" -MemberType NoteProperty -Value $ProcIP
-    # Table Coulumn 3 - Hostname
-    $DeviceResultItem | Add-Member -Name "Hostname" -MemberType NoteProperty -Value $deviceHostname
-    # Table Coulumn 4 - Error
-    $DeviceResultItem | Add-Member -Name "Error" -MemberType NoteProperty -Value $ConnectError
-    # Table Coulumn 5 - Status
-    $DeviceResultItem | Add-Member -Name "Status" -MemberType NoteProperty -Value $Status    
-    # Add line to the report
-    $DeviceResultsData += $DeviceResultItem
- 
-    #Append results to Processor Change Results Document + Log 
-    $DeviceResultsData | Export-Csv -Path "$Path\Proc Config Results.csv" -NoTypeInformation -append
-    $DeviceResultsData | Export-Csv -Path "$Path\Proc Config Results Log.csv" -NoTypeInformation -append
-
-    # Total time of script
-    # $stopwatch
-
-}
-
-function PanelConfig([string]$Panel, [string]$VTZPath, [string]$ProcIP, [int]$IPID)
-{
-    try
-    {
-        # Clear Connect Error
-        $ConnectError = " "
-
-        # Clear Status
-        $Status = " "
-        
-        # New Data Object
-        $DeviceResultItem = New-Object PSObject
-        Write-Host -f Green "Panel Config Setup for: $Panel"
-        
-        # Connect to Device via SSH
-        $SessionID = Open-CrestronSession -Device $Panel -Secure -Username $User -Password $Pass -ErrorAction SilentlyContinue
-
-        # Hostname
-        $hostnameResponce = Invoke-CrestronSession $SessionID "hostname"
-        $deviceHostname = [regex]::Match($hostnameResponce, "(?<=Host\sName:\s)[\w-]+").value
-        Write-Host -f Green "Working on => $deviceHostname`n`n`n`n"
-        
-        # Send Display Project
-        Send-CrestronProject -ShowProgress -Device $Panel -LocalFile $VTZPath -Secure -Username $User -Password $Pass
-        
-        # IP Table Setup
-        Write-Host '>>> Setting up Panel IP Table '+ $Panel
-        $SessionID = Open-CrestronSession -Device $Panel -Secure -Username $User -Password $Pass -ErrorAction SilentlyContinue
-        $AddMaster = "addm {0:X} {1}" -f $IPID, $ProcIP
-        Invoke-CrestronSession $SessionID -Command "$AddMaster"
-        
-        # Close Session
-        Close-CrestronSession $SessionID
-        
-        # Print Success to Console
-        $Status = "Panel Config Success"
-        Write-Host -ForegroundColor Green "`n - Panel Config Success`n`n`n`n"
-    }
-
-    catch
-    {
-        # Write Error Log 
-        $deviceHostname =" "
-        $ConnectError = "Connection Attempts Unsuccessful"
-        Write-Host -f Red "`n $d - Unable to Configure Panel`n`n`n`n"
-    }
-
-    # Current Date/Time
-    $time = (get-date)
-    # Build Table
-    # Table Coulumn 1 - Time
-    $DeviceResultItem | Add-Member -Name "Time" -MemberType NoteProperty -Value $time
-    # Table Coulumn 2 - IP Address
-    $DeviceResultItem | Add-Member -Name "IP Address" -MemberType NoteProperty -Value $Panel
-    # Table Coulumn 3 - Hostname
-    $DeviceResultItem | Add-Member -Name "Hostname" -MemberType NoteProperty -Value $deviceHostname
-    # Table Coulumn 4 - Error
-    $DeviceResultItem | Add-Member -Name "Error" -MemberType NoteProperty -Value $ConnectError
-    # Table Coulumn 5 - Status
-    $DeviceResultItem | Add-Member -Name "Status" -MemberType NoteProperty -Value $Status
-    # Add line to the report
-    $DeviceResultsData += $DeviceResultItem
- 
-    # Append results to Panel Config Change Results Document + Log 
-    $DeviceResultsData | Export-Csv -Path "$Path\Panel Config Results.csv" -NoTypeInformation -append
-    $DeviceResultsData | Export-Csv -Path "$Path\Panel Config Results Log.csv" -NoTypeInformation -append
-
-    # Total time of script
-    # $stopwatch
-
-}
 
 class Courtroom
 {
@@ -361,12 +193,6 @@ class Courtroom
 
 
 
-
-# Import Device Data
-#$global:rooms = @{}
-#$global:roomsByName = @{}
-
-
 function importFile([string]$fileName)
 {
    
@@ -374,7 +200,7 @@ function importFile([string]$fileName)
     {
         $global:sheet = Import-csv $fileName
         $sheetLen = $sheet | Measure-Object | Select-Object -ExpandProperty Count
-        Write-Host -ForegroundColor Yellow ("Ok, I imported the file $fileName.`nThere are $sheetLen rooms in the list.`n`n")
+        Shell03 "Ok, I imported the file $fileName.`nThere are $sheetLen rooms in the list.`n`n"
     }
     else
     {
@@ -393,47 +219,59 @@ function importFile([string]$fileName)
         #     Ergo, the first dict entry will be     (2, $c) 
      
         $i += 1
-        Write-Host $1
 
-        $c = new-object -TypeName Courtroom
+        try
+        {
+            $c = new-object -TypeName Courtroom
  
-        $c.Index = $i           
-        $c.CommentLine = $row | Select-object -ExpandProperty Ignore_Line
+            $c.Index = $i           
+            $c.CommentLine = $row | Select-object -ExpandProperty Ignore_Line
 
-        $c.RoomName = $row | Select-object -ExpandProperty Room_Name
-        $c.FacilityName = $row | select-object -ExpandProperty Facility_Name
+            $c.RoomName = $row | Select-object -ExpandProperty Room_Name
+            $c.FacilityName = $row | select-object -ExpandProperty Facility_Name
 
-        $c.Subnet = $row | select-object -ExpandProperty Subnet_Address
+            $c.Subnet = $row | select-object -ExpandProperty Subnet_Address
 
-        $c.Processor_IP = $row | Select-object -ExpandProperty Processor_IP
-        $c.FileName_LPZ = $row | Select-object -ExpandProperty FileName_LPZ
-        $c.Panel_IP = $row | Select-object -ExpandProperty Panel_IP
-        $c.Panel_IP = $c.Panel_IP[0].split('~')
-        $c.FileName_VTZ = $row | Select-object -ExpandProperty FileName_VTZ
-        $c.FileName_VTZ = $c.FileName_VTZ[0].split('~')
+            $c.Processor_IP = $row | Select-object -ExpandProperty Processor_IP
+            $c.FileName_LPZ = $row | Select-object -ExpandProperty FileName_LPZ
+            $c.Panel_IP = $row | Select-object -ExpandProperty Panel_IP
+            $c.Panel_IP = $c.Panel_IP[0].split('~')
+            $c.FileName_VTZ = $row | Select-object -ExpandProperty FileName_VTZ
+            $c.FileName_VTZ = $c.FileName_VTZ[0].split('~')
 
-        $c.ReporterWebSvc_IP = $row | Select-object -ExpandProperty IP_ReporterWebSvc
+            $c.ReporterWebSvc_IP = $row | Select-object -ExpandProperty IP_ReporterWebSvc
 
-        $c.Wyrestorm_IP = $row | Select-Object -ExpandProperty IP_WyrestormCtrl
+            $c.Wyrestorm_IP = $row | Select-Object -ExpandProperty IP_WyrestormCtrl
 
-        $c.FixedCam_IP = $row | Select-object -ExpandProperty IP_FixedCams
-        $c.FixedCam_IP = $c.FixedCam_IP[0].split('~')
+            $c.FixedCam_IP = $row | Select-object -ExpandProperty IP_FixedCams
+            $c.FixedCam_IP = $c.FixedCam_IP[0].split('~')
             
-        $c.DSP_IP = $row | Select-object -ExpandProperty IP_DSPs
-        $c.DSP_IP = $c.DSP_IP[0].split('~')
+            $c.DSP_IP = $row | Select-object -ExpandProperty IP_DSPs
+            $c.DSP_IP = $c.DSP_IP[0].split('~')
 
-        $c.RecorderSvr_IP = $row | Select-object -ExpandProperty IP_Recorders
-        $c.RecorderSvr_IP = $c.RecorderSvr_IP[0].split('~')
+            $c.RecorderSvr_IP = $row | Select-object -ExpandProperty IP_Recorders
+            $c.RecorderSvr_IP = $c.RecorderSvr_IP[0].split('~')
 
-        $c.DVD_IP = $row | Select-Object -ExpandProperty IP_DVDPlayer
+            $c.DVD_IP = $row | Select-Object -ExpandProperty IP_DVDPlayer
 
-        $c.Audicue_IP = $row | Select-Object -ExpandProperty IP_AudicueGW
+            $c.Audicue_IP = $row | Select-Object -ExpandProperty IP_AudicueGW
 
-        $c.PTZCam_IP = $row | Select-Object -ExpandProperty IP_PTZCams 
-        $c.PTZCam_IP = $c.PTZCam_IP[0].split('~')
+            $c.PTZCam_IP = $row | Select-Object -ExpandProperty IP_PTZCams 
+            $c.PTZCam_IP = $c.PTZCam_IP[0].split('~')
 
-        $rooms[$c.Index] = $c
-        $roomsByName[$c.RoomName] = $rooms[$c.Index]
+            $rooms[$c.Index] = $c
+            $roomsByName[$c.RoomName] = $rooms[$c.Index]
+
+            $global:NumOfRooms += 1
+        }
+        catch
+        {
+            Write-Host -ForegroundColor Red ("import failed for line " + $i)
+        }
+    }
+    if($NumOfRooms -gt 0)
+    {
+        $global:FileLoaded = $true
     }
 }
 
@@ -442,7 +280,7 @@ function getFileName
     $FileBrowser = New-Object System.Windows.Forms.OpenFileDialog -Property @{ InitialDirectory = $ScriptPath }
     $null = $FileBrowser.ShowDialog()
     $fileName = $FileBrowser | Select-Object -ExpandProperty FileName
-    Write-Host $fileName
+    $global:SelectedFile = $fileName
     return ($fileName)    
 }
 
@@ -451,3 +289,118 @@ function selectAndImport
     importFile (getFileName)
 }
 
+######################################################################################################
+######################################################################################################
+######################################################################################################
+
+function Shell01
+{
+    [string]$data = ""
+
+
+
+    $data += "`n`n"
+
+    $data += "Please make a selection.`n"
+    $data += "`n"
+
+    $global:Shell01 = $data
+}
+
+function Shell02
+{
+    [string]$data = ""
+    $data += "a) load a .csv file`n"
+    $data += "b) load Crestron processors IP table`n"
+    $data += "c) load Crestron panels IP table`n"
+    $data += "i) info`n"
+    $data += "x) exit`n"
+
+    $data += "`n"
+
+    $global:Shell02 = $data
+}
+
+function Shell03([string]$s)
+{
+    $s = $global:Shell03 + $s 
+    [string[]]$data = $s.Split("`n")
+    if($data.Length > $global:Shell03Len)
+    {
+        $data = $data[(-$global:Shell03Len)..1]
+    }
+    $data += ">"
+    $ofs = ""
+    $global:Shell03 = "$data"
+}
+
+function showInfo
+{
+    $s = ""
+    if($FileLoaded -eq $false)
+    {
+        $s1 = "[no file loaded]"
+    }
+    else
+    {
+        $s1 = $SelectedFile
+    }
+    [string]$data = ""
+    $data += (".csv file: " + $s1 + "`n") 
+    $data += ("num of rooms loaded: " + $NumOfRooms + "`n")
+
+    Shell03 $data
+}
+
+function updateShell
+{
+    fClear
+    Write-Host -ForegroundColor Yellow $global:Shell01
+    Write-Host -ForegroundColor Green $global:Shell02
+    Write-Host -ForegroundColor White $global:Shell03
+}
+
+
+function getCommand
+{
+    [string]$choice = Read-Host
+
+    if($choice -ieq 'a')
+    {
+        selectAndImport
+        continueScript
+    }
+    elseif($choice -ieq 'b')
+    {
+    
+    }
+    elseif($choice -ieq 'c')
+    {
+
+    }
+    elseif($choice -ieq 'i')
+    {
+        showInfo
+        continueScript
+    }
+    elseif($choice -ieq 'x')
+    {
+        exit
+    }
+}
+
+function setShellAll
+{
+    Shell01
+    Shell02
+    Shell03
+}
+
+function continueScript
+{
+    setShellAll
+    updateShell
+    getCommand
+}
+
+continueScript
