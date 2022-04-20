@@ -308,13 +308,13 @@ function importFile([string]$fileName)
     {
         $global:sheet = Import-csv $fileName
         $sheetLen = $sheet | Measure-Object | Select-Object -ExpandProperty Count
-        fErr "File import successful." $false
-        fErr "File name: $fileName." $false
-        fErr "Number of data lines found: $sheetLen" $false
+        fErr ("Import: File opened successfully.") $false
+        fErr ("Import: File name - {0}" -f $fileName) $false
+        fErr ("Import: Found {0} data lines to parse." -f $sheetLen) $false
     }
     else
     {
-        fErr "File import failed. File not found: $filename." $true
+        fErr ("Import: File import failed.") $true
     }
 
     $global:rooms = @{}
@@ -333,7 +333,7 @@ function importFile([string]$fileName)
             {
                 $global:roomDefaults = new-object -TypeName Courtroom
                 $global:roomDefaults = parseLine $c $i $row  
-                fErr ("`nImport: parsed defaults line {0:d3}`n" -f $i) $false
+                fErr ("Import: Parsed defaults line {0:d3}" -f $i) $false
             }
             else
             {
@@ -343,19 +343,19 @@ function importFile([string]$fileName)
                 # $roomsByName[$c.RoomName] = $rooms[$c.Index]
 
                 $global:NumOfRooms++
-                fErr ("Import: parsed data line {0:d3}`n" -f $i) $false
+                fErr ("Import: Parsed data line {0:d3}" -f $i) $false
             }
         }
         catch
         {
-            fErr ("`nImport: file import failed for line {0:d3}." -f $i) $true
+            fErr ("Import: File import failed for line {0:d3}." -f $i) $true
         }
     }
     if($NumOfRooms -gt 0)
     {
         $global:FileLoaded = $true
 
-        fErr ("Import: success. {0:d3} rooms parsed." -f $NumOfRooms) $false
+        fErr ("Import: File import success. {0} rooms parsed." -f $NumOfRooms) $false
     }
 }
 
@@ -425,6 +425,16 @@ function decodeRange([string]$s)
     if($s -ieq "b")
     {
         continueScript
+    }
+    elseif($s -ieq "*")
+    {
+        $r = @()
+        foreach($k in $global:rooms.keys)
+        {
+            $r += $k
+        }
+        fErr ("Target: User selected to target all (`'*`') rooms. {0} rooms added." -f $r.length) $false
+        return [string[]]$r
     }
     # target the specified rooms
     else
@@ -517,7 +527,6 @@ function sendProcIPT
 {    
     showAllRooms
     $targets = decodeRange(getRangeOfRooms)
-    # $targets = [System.Int32[]]$targets
     if(-not $targets)
     {
         fErr "ProcIPT: No rooms were targeted." $true
@@ -613,9 +622,6 @@ function sendProcIPT
                 $ipid++
             }
         }
-
-
-
         
         # Reset Program
         try
@@ -641,12 +647,7 @@ function sendProcIPT
     }
 }
 
-function sendPanelIPT
-{
-    showAllRooms
-    [int[]]$targets = decodeRange(getRangeOfRooms)
-    #foreach($target     
-}
+
 
 
 
