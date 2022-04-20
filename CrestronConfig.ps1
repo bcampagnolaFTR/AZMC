@@ -222,87 +222,81 @@ function fErr ($s, $c)
 
 class Courtroom
 {
-    $items = @(
-    [int]$Index,
-    # [string]$CommentLine
-    [string]$RoomName,
-    [string]$FacilityName,
-    [string]$Subnet,
-    [string]$Processor_IP,
-    [string]$FileName_LPZ,
-    [bool]$localLPZFile,
-    [string[]]$Panel_IP,
-    [string[]]$FileName_VTZ,
-    [bool]$localVTZFile,
-    [string]$ReporterWebSvc_IP,
-    [string]$Wyrestorm_IP,
-    [string[]]$FixedCam_IP,
-    [string[]]$DSP_IP,
-    [string[]]$RecorderSvr_IP,
-    [string]$DVD_IP,
-    [string]$MuteGW_IP,
+    [int]$Index
+    [string]$RoomName
+    [string]$FacilityName
+    [string]$Subnet
+    [string]$Processor_IP
+    [string]$FileName_LPZ
+    [bool]$localLPZFile
+    [string[]]$Panel_IP
+    [string[]]$FileName_VTZ
+    [bool]$localVTZFile
+    [string]$ReporterWebSvc_IP
+    [string]$Wyrestorm_IP
+    [string[]]$FixedCam_IP
+    [string[]]$DSP_IP
+    [string[]]$RecorderSvr_IP
+    [string]$DVD_IP
+    [string]$MuteGW_IP
     [string[]]$PTZCam_IP
-    )
 }
 
 
 function parseLine($c, $i, $row)
 {
  
+    # the index is the key for $global:rooms dict entries
+    # should also align with the excel spreadsheet row numbers
     $c.Index = $i           
-    # $c.CommentLine = $row | Select-object -ExpandProperty Ignore_Line
 
+    # should probably name every room uniquely, in case we want to create a $global:roomsByName hashtable
     $c.RoomName = $row | Select-object -ExpandProperty Room_Name
     $c.FacilityName = $row | select-object -ExpandProperty Facility_Name
     $c.Subnet = $row | select-object -ExpandProperty Subnet_Address
-    if(-not $c.Subnet.length) { $c.Subnet = $global:roomDefaults.Subnet }
 
+    # only 1 Proc_IP and 1 LPZ per room
     $c.Processor_IP = $row | Select-object -ExpandProperty Processor_IP
-    if(-not $c.Processor_IP.length) { $c.Processor_IP = $global:roomDefaults.Processor_IP }
     $c.FileName_LPZ = $row | Select-object -ExpandProperty FileName_LPZ
-    if(-not $c.FileName_LPZ.length) { $c.FileName_LPZ = $global:roomDefaults.FileName_LPZ }
 
+    # multiple panel_IPs and multiple fileName_VTZs are possible
     $c.Panel_IP = $row | Select-object -ExpandProperty Panel_IP
-    if(-not $c.Panel_IP.length) { $c.Panel_IP = $global:roomDefaults.Panel_IP[0] }
     $c.FileName_VTZ = $row | Select-object -ExpandProperty FileName_VTZ
-    if(-not $c.FileName_VTZ.length) { $c.FileName_VTZ = $global:roomDefaults.FileName_VTZ[0] }
 
+    # x 1
     $c.ReporterWebSvc_IP = $row | Select-object -ExpandProperty IP_ReporterWebSvc
-    if(-not $c.ReporterWebSvc_IP.length) { $c.ReporterWebSvc_IP = $global:roomDefaults.ReporterWebSvc_IP }
-
     $c.Wyrestorm_IP = $row | Select-Object -ExpandProperty IP_WyrestormCtrl
-    if(-not $c.Wyrestorm_IP.length) { $c.Wyrestorm_IP = $global:roomDefaults.Wyrestorm_IP }
 
-    $c.FixedCam_IP = $row | Select-object -ExpandProperty IP_FixedCams
-    if(-not $c.FixedCam_IP.length) { $c.FixedCam_IP = $global:roomDefaults.FixedCam_IP[0] }
-            
+    # x Multiple
+    $c.FixedCam_IP = $row | Select-object -ExpandProperty IP_FixedCams        
     $c.DSP_IP = $row | Select-object -ExpandProperty IP_DSPs
-    if(-not $c.DSP_IP.length) { $c.DSP_IP = $global:roomDefaults.DSP_IP[0] }
-
     $c.RecorderSvr_IP = $row | Select-object -ExpandProperty IP_Recorders
-    if(-not $c.RecorderSvr_IP.length) { $c.RecorderSvr_IP = $global:roomDefaults.RecorderSvr_IP[0] }
-
-    $c.DVD_IP = $row | Select-Object -ExpandProperty IP_DVDPlayer
-    if(-not $c.DVD_IP.length) { $c.DVD_IP = $global:roomDefaults.DVD_IP }
-
-    $c.MuteGW_IP = $row | Select-Object -ExpandProperty IP_AudicueGW
-    if(-not $c.MuteGW_IP.length) { $c.MuteGW_IP = $global:roomDefaults.MuteGW_IP }
-
-    $c.PTZCam_IP = $row | Select-Object -ExpandProperty IP_PTZCams 
-    if(-not $c.PTZCam_IP.length) { $c.PTZCam_IP = $global:roomDefaults.PTZCam_IP[0] }
-
     
-    if($i -ne 2)
+    # x 1
+    $c.DVD_IP = $row | Select-Object -ExpandProperty IP_DVDPlayer
+    $c.MuteGW_IP = $row | Select-Object -ExpandProperty IP_AudicueGW
+    
+    # x Multiple
+    $c.PTZCam_IP = $row | Select-Object -ExpandProperty IP_PTZCams 
+    
+    
+    # split the multiples by ~
+    $c.Panel_IP = $c.Panel_IP[0].split('~')
+    $c.FileName_VTZ = $c.FileName_VTZ[0].split('~')
+    $c.FixedCam_IP = $c.FixedCam_IP[0].split('~')
+    $c.DSP_IP = $c.DSP_IP[0].split('~')    
+    $c.RecorderSvr_IP = $c.RecorderSvr_IP[0].split('~')
+    $c.PTZCam_IP = $c.PTZCam_IP[0].split('~')
+
+    $numOfPanels = $c.panel_IP.length
+    $numOfVTZ = $c.FileName_VTZ.length
+
+    # if there are multiple panel IP addresses, but there are fewer VTZ files listed,
+    # take the first FileName_VTZ[0], and create an array of multiple VTZ files to match
+    # the number of panel IPs  
+    if($numOfPanels -gt $numOfVTZ)
     {
-        $c.Panel_IP = $c.Panel_IP[0].split('~')
-        $c.FileName_VTZ = $c.FileName_VTZ[0].split('~')
-
-        # do the thing for multiple panels
-
-        $c.FixedCam_IP = $c.FixedCam_IP[0].split('~')
-        $c.DSP_IP = $c.DSP_IP[0].split('~')    
-        $c.RecorderSvr_IP = $c.RecorderSvr_IP[0].split('~')
-        $c.PTZCam_IP = $c.PTZCam_IP[0].split('~')
+        $c.FileName_VTZ = [string[]]@($c.FileName_VTZ[0])*$numOfPanels
     }
 
     return $c
@@ -338,8 +332,8 @@ function importFile([string]$fileName)
             if($i -eq 2)
             {
                 $global:roomDefaults = new-object -TypeName Courtroom
-                $global:roomDefaults = parseLine $c. $i $row  
-                fErr ("Import: parsed defaults line ({0:d3})" -f $i) $false
+                $global:roomDefaults = parseLine $c $i $row  
+                fErr ("`nImport: parsed defaults line {0:d3}`n" -f $i) $false
             }
             else
             {
@@ -349,19 +343,19 @@ function importFile([string]$fileName)
                 # $roomsByName[$c.RoomName] = $rooms[$c.Index]
 
                 $global:NumOfRooms++
-                fErr ("Import: parsed data line ({0:d3})" -f $i) $false
+                fErr ("Import: parsed data line {0:d3}`n" -f $i) $false
             }
         }
         catch
         {
-            fErr ("File import failed for line {0:d3}." -f $i) $true
+            fErr ("`nImport: file import failed for line {0:d3}." -f $i) $true
         }
     }
     if($NumOfRooms -gt 0)
     {
         $global:FileLoaded = $true
 
-        fErr ("Import: success. {0} rooms found." -f $NumOfRooms) $false
+        fErr ("Import: success. {0:d3} rooms parsed." -f $NumOfRooms) $false
     }
 }
 
@@ -465,14 +459,59 @@ function decodeRange([string]$s)
     }
 }
 
-
-
-function fIPT ($SessID, $IPID, $sub, $node)
+function fIPTSend([System.Guid]$SessID, [System.Int32]$IPID, [string]$sub, [string]$node, $target)
 {
-    $AddPeer = "AddP {0:X} {1}{2}" -f $IPID, $sub, $node
-    $response = Invoke-CrestronSession $SessID -Command "$AddPeer"
+    $ipaddr = $sub+"."+$node
+
+    # remove double dots .. (convenience)
+    while(".." -in $ipaddr)
+    {
+        $ipaddr = $ipaddr.replace("..", ".")
+    }
+
+    $AddPeer = "AddP {0:X} {1}" -f $IPID, $ipaddr
+    try
+    {
+        $response = Invoke-CrestronSession $SessID -Command ("{0}" -f $AddPeer)
+        fErr ("ProcIPT: Successfully sent IPID {0} IPAddr {1} to the processor in room {2:d3}." -f $ipid, $ipaddr, $target) $false
+    }
+    catch
+    {
+        fErr ("ProcIPT: Failed to commit IPID {0} IPAddr {1} to the processor in room {2:d3}." -f $ipid, $ipaddr, $target) $true
+    }
 }
 
+function fIPT ([System.Guid]$SessID, [System.Int32]$IPID, [string]$sub, [string]$node, [string]$def, $target)
+{
+    # if the node address value is "0", skip
+    if($node -ieq "0")
+    {
+        return
+    }
+    # elseif the node address value is populated on the spreadsheet, use it
+    elseif($node)
+    {
+        foreach($n in $node)
+        {
+            fIPTSend $SessID, $IPID, $sub, $n
+            $IPID ++
+        }
+    }
+    # if not, check the $global:roomDefaults value
+    elseif($def)
+    {
+        foreach($n in $def)
+        {
+            fIPTSend $SessID, $IPID, $sub, $n
+            $IPID ++
+        }
+    }
+    # if both are null / empty / zero, just skip this line
+    else
+    {
+        return
+    }
+}
 
 function sendProcIPT
 {    
@@ -481,7 +520,7 @@ function sendProcIPT
     # $targets = [System.Int32[]]$targets
     if(-not $targets)
     {
-        ferr 0 "No rooms were targeted." $true
+        fErr "ProcIPT: No rooms were targeted." $true
         return
     }
     
@@ -491,7 +530,7 @@ function sendProcIPT
         # check for
         if($target -notin $global:rooms.keys)
         {
-            fErr $target "Target room not in list of rooms." $True
+            fErr ("ProcIPT: Target room {0:d3} is not in the list of rooms." -f $target) $True
             continue
         }
         $r = $global:rooms[$target]
@@ -501,12 +540,11 @@ function sendProcIPT
         try
         {
             $SessID = Open-CrestronSession -Device $r.Processor_IP # -ErrorAction SilentlyContinue
-            fErr $target "Open-CrestronSession successful. SessionID: {0}" -f $SessID, $False
+            fErr ("ProcIPT: Open-CrestronSession for room {1:d3} successful. SessionID: {0}" -f $SessID, $target) $False
         }
         catch
         {
-            fErr $target "Open-CrestronSession failed." $True  
-            fErr $target "Check the IP address in the spreadsheet. Be sure that you can ping the device from this machine.`n" $True
+            fErr ("ProcIPT: Open-CrestronSession failed for room {0:d3}." -f $target) $True  
             continue 
         }
 
@@ -515,93 +553,91 @@ function sendProcIPT
         {
             $hostnameResponse = Invoke-CrestronSession $SessID "hostname"
             $deviceHostname = [regex]::Match($hostnameResponse, "(?<=Host\sName:\s)[\w-]+").value
-            fErr $target "Got hostname: $deviceHostname" $false
+            fErr ("ProcIPT: Retrieved hostname `'{0}`' from the {1:d3} processor." -f $deviceHostname, $target) $false
         }
         catch
         {
-            fErr $target "Hostname failed to resolve: $hostnameResponse" $True
+            fErr ("ProcIPT: The {0:d3} processor failed to respond with a valid hostname." -f $target) $True
+            fErr ("ProcIPT: Attetmpting to continue with loading the IP table.") $True
         }
-
 
         # Send Crestron Program to Processor Secure
         # Send-CrestronProgram -ShowProgress -Device $ProcIP -LocalFile $LPZPath
 
-
+        $d = $global:roomDefaults
 
         # FTR ReporterWebSvc
-        fIPT $SessID, 0x05, $sub, $r.ReporterWebSvc_IP
+        fIPT $SessID 0x05 $sub $r.ReporterWebSvc_IP $d.ReporterWebSvc_IP 
 
         # Wyrestorm Ctrl
-        fIPT $SessID, 0x06, $sub, $r.WyrestormCtrl_IP
+        fIPT $SessID 0x06 $sub $r.WyrestormCtrl_IP $d.WyrestormCtrl_IP             
 
         # Fixed Cams
-        $IPID = 0x07
-        foreach($node in $r.FixedCams_IP)
-        {
-            fIPT $SessID, $IPID, $sub, $node
-            $IPID += 1
-        }
-
+        fIPT $SessID 0x07 $sub $r.FixedCams_IP $d.FixedCams_IP
+ 
         # DSPs
-        $IPID = 0x0d
-        foreach($node in $r.DSP_IP)
-        {
-            fIPT $SessID, $IPID, $sub, $node
-            $IPID += 1
-        }
+        fIPT $SessID 0x0d $sub $r.DSP_IP $d.DSP_IP
 
         # FTR Recorders
-        $IPID = 0x18
-        foreach($node in $r.RecorderWebSvr_IP)
-        {
-            fIPT $SessID, $IPID, $sub, $node
-            $IPID += 1
-        }
+        fIPT $SessID 0x18 $sub $r.RecorderSvr_IP $d.RecorderSvr_IP
 
         # DVD Player
-        fIPT $SessID, 0x1a, $sub, $r.DVD_IP
+        fIPT $SessID 0x1a $sub $r.DVD_IP $d.DVD_IP
 
         # Mute Gateways
-        $IPID = 0x20
-        foreach($node in $r.MuteGW_IP)
-        {
-            fIPT $SessID, $IPID, $sub, $node
-            $IPID += 1
-        }
+        fIPT $SessID 0x20 $sub $r.MuteGW_IP $d.MuteGW_IP
 
         #PTZ Cams
-        $IPID = 0x23
-        foreach($node in $r.PTZCam_IP)
+        $ipid = 0x23
+        if($r.PTZCam_IP -ieq "0")
         {
-            fIPT $SessID, $IPID, $sub, $node
-            $IPID += 1
-            fIPT $SessID, $IPID, $sub, $node
-            $IPID += 1
+
         }
+        elseif($r.PTZCam_IP)
+        {
+            foreach($n in $r.PTZCam_IP)
+            {
+                fIPTSend $SessIP $ipid $sub $n
+                $ipid++
+                fIPTSend $SessIP $ipid $sub $n
+                $ipid++
+            }
+        }
+        elseif($d.PTZCam_IP)
+        {
+            foreach($n in $d.PTZCam_IP)
+            {
+                fIPTSend $SessIP $ipid $sub $n
+                $ipid++
+                fIPTSend $SessIP $ipid $sub $n
+                $ipid++
+            }
+        }
+
+
+
         
         # Reset Program
         try
         {
             Invoke-CrestronSession $SessID 'progreset -p:01'
-            fErr $target, "Restarting program.", $False
+            fErr ("ProcIPT: Restarting program for room {0:d3}." -f $target) $False
         }
         catch
         {
-            fErr $target, "Failed to restart program.", $True
+            fErr ("ProcIPT: Program restart failed for room {0:d3}." -f $target) $True
         }
-        finally{}
 
         # Close Session
         try
         {
             Close-CrestronSession $SessID
-            fErr $target, "Close-CrestronSession successful. $SessID", $False
+            fErr ("ProcIPT: Close-CrestronSession successful for room {0:d3}." -f $target) $False
         }
         catch
         {
-            fErr $target, "Close-CrestronSession failed. You should probably restart the PowerShell script.", $True
+            fErr ("ProcIPT: Close-CrestronSession failed for room {0:d3}, `$SessID {1}." -f $target, $SessID) $True
         }
-        finally{}
     }
 }
 
