@@ -1,5 +1,5 @@
 ﻿Room_Name,Facility_Name,Subnet_Address,Processor_IP,FileName_LPZ,Panel_IP,FileName_VTZ,IP_ReporterWebSvc,IP_WyrestormCtrl,IP_FixedCams,IP_DSPs,IP_Recorders,IP_DVDPlayer,IP_AudicueGW,IP_PTZCams,Notes
-Defaults,,,13,AZMC_v3.02.01.lpz,26,AZMC_TSW1060_v3.02.01.vtz,10,18,20~21~22~23,15~16~17,11~12,46,19~20,25,
+Defaults,,,13,AZMC_v3.02.01.lpz,26,AZMC_TSW1060_v3.02.01.vtz,10,18,20~21~22~23,15~16~17,11~12,46,19,25,
 A001,spaceStation,192.168.11,,,,,,,,,,,,,
 A002,,192.168.12,,,,,,,,,,,,,
 A003,,192.168.13,,,,,,,,,,,,,

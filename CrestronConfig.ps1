@@ -35,6 +35,7 @@ $global:Shell02 = ""
 $global:Shell03 = ""
 $global:Shell03Len = 30
 $global:logLevel = 1
+$global:roomDefaults = $null
 
 
 
@@ -175,13 +176,16 @@ function fGetDateTime
 }
 
 
-$global:logFileName = fGetDateTime + ".log"
+$global:logFileName = fGetDateTime
+$global:logFileName += ".log"
 
 New-Item -Path .\PS_Logs -ItemType "file" -Name $global:logFileName
 
-function fLogWrite ($s)
+function fLog ([string]$s)
 {
-    fGetDateTime$s >> .\PS_Logs\$global:logFileName
+    $dt = fGetDateTime
+    $s = "{0}  -  {1}" -f [string]$dt, $s
+    $s >> .\PS_Logs\$global:logFileName
 }
 
 function fErr ($s, $c)
@@ -218,174 +222,146 @@ function fErr ($s, $c)
 
 class Courtroom
 {
-    [int]$Index
+    $items = @(
+    [int]$Index,
     # [string]$CommentLine
-    [string]$RoomName
-    [string]$FacilityName
-    [string]$Subnet
-    [string]$Processor_IP
-    [string]$FileName_LPZ
-    [bool]$localLPZFile
-    [string[]]$Panel_IP
-    [string[]]$FileName_VTZ
-    [bool]$localVTZFile
-    [string]$ReporterWebSvc_IP
-    [string]$Wyrestorm_IP
-    [string[]]$FixedCam_IP
-    [string[]]$DSP_IP
-    [string[]]$RecorderSvr_IP
-    [string]$DVD_IP
-    [string]$MuteGW_IP
+    [string]$RoomName,
+    [string]$FacilityName,
+    [string]$Subnet,
+    [string]$Processor_IP,
+    [string]$FileName_LPZ,
+    [bool]$localLPZFile,
+    [string[]]$Panel_IP,
+    [string[]]$FileName_VTZ,
+    [bool]$localVTZFile,
+    [string]$ReporterWebSvc_IP,
+    [string]$Wyrestorm_IP,
+    [string[]]$FixedCam_IP,
+    [string[]]$DSP_IP,
+    [string[]]$RecorderSvr_IP,
+    [string]$DVD_IP,
+    [string]$MuteGW_IP,
     [string[]]$PTZCam_IP
-
+    )
 }
 
 
-function parseLine()
+function parseLine($c, $i, $row)
 {
  
-            $c.Index = $i           
-            # $c.CommentLine = $row | Select-object -ExpandProperty Ignore_Line
+    $c.Index = $i           
+    # $c.CommentLine = $row | Select-object -ExpandProperty Ignore_Line
 
-            $c.RoomName = $row | Select-object -ExpandProperty Room_Name
-            $c.FacilityName = $row | select-object -ExpandProperty Facility_Name
+    $c.RoomName = $row | Select-object -ExpandProperty Room_Name
+    $c.FacilityName = $row | select-object -ExpandProperty Facility_Name
+    $c.Subnet = $row | select-object -ExpandProperty Subnet_Address
+    if(-not $c.Subnet.length) { $c.Subnet = $global:roomDefaults.Subnet }
 
-            $c.Subnet = $row | select-object -ExpandProperty Subnet_Address
+    $c.Processor_IP = $row | Select-object -ExpandProperty Processor_IP
+    if(-not $c.Processor_IP.length) { $c.Processor_IP = $global:roomDefaults.Processor_IP }
+    $c.FileName_LPZ = $row | Select-object -ExpandProperty FileName_LPZ
+    if(-not $c.FileName_LPZ.length) { $c.FileName_LPZ = $global:roomDefaults.FileName_LPZ }
 
-            $c.Processor_IP = $row | Select-object -ExpandProperty Processor_IP
-            $c.FileName_LPZ = $row | Select-object -ExpandProperty FileName_LPZ
-            if($c.FileName_LPZ[0].length > 0)
-            {
-                $c.localLPZFile = $True
-            }
+    $c.Panel_IP = $row | Select-object -ExpandProperty Panel_IP
+    if(-not $c.Panel_IP.length) { $c.Panel_IP = $global:roomDefaults.Panel_IP[0] }
+    $c.FileName_VTZ = $row | Select-object -ExpandProperty FileName_VTZ
+    if(-not $c.FileName_VTZ.length) { $c.FileName_VTZ = $global:roomDefaults.FileName_VTZ[0] }
 
-            $c.Panel_IP = $row | Select-object -ExpandProperty Panel_IP
-            $c.Panel_IP = $c.Panel_IP[0].split('~')
-            $c.FileName_VTZ = $row | Select-object -ExpandProperty FileName_VTZ
-            $c.FileName_VTZ = $c.FileName_VTZ[0].split('~')
-            if($c.FileName_VTZ[0].length > 0)
-            {
-                $c.localVTZFile = $True
-            }
+    $c.ReporterWebSvc_IP = $row | Select-object -ExpandProperty IP_ReporterWebSvc
+    if(-not $c.ReporterWebSvc_IP.length) { $c.ReporterWebSvc_IP = $global:roomDefaults.ReporterWebSvc_IP }
 
-            $c.ReporterWebSvc_IP = $row | Select-object -ExpandProperty IP_ReporterWebSvc
+    $c.Wyrestorm_IP = $row | Select-Object -ExpandProperty IP_WyrestormCtrl
+    if(-not $c.Wyrestorm_IP.length) { $c.Wyrestorm_IP = $global:roomDefaults.Wyrestorm_IP }
 
-            $c.Wyrestorm_IP = $row | Select-Object -ExpandProperty IP_WyrestormCtrl
-
-            $c.FixedCam_IP = $row | Select-object -ExpandProperty IP_FixedCams
-            $c.FixedCam_IP = $c.FixedCam_IP[0].split('~')
+    $c.FixedCam_IP = $row | Select-object -ExpandProperty IP_FixedCams
+    if(-not $c.FixedCam_IP.length) { $c.FixedCam_IP = $global:roomDefaults.FixedCam_IP[0] }
             
-            $c.DSP_IP = $row | Select-object -ExpandProperty IP_DSPs
-            $c.DSP_IP = $c.DSP_IP[0].split('~')
+    $c.DSP_IP = $row | Select-object -ExpandProperty IP_DSPs
+    if(-not $c.DSP_IP.length) { $c.DSP_IP = $global:roomDefaults.DSP_IP[0] }
 
-            $c.RecorderSvr_IP = $row | Select-object -ExpandProperty IP_Recorders
-            $c.RecorderSvr_IP = $c.RecorderSvr_IP[0].split('~')
+    $c.RecorderSvr_IP = $row | Select-object -ExpandProperty IP_Recorders
+    if(-not $c.RecorderSvr_IP.length) { $c.RecorderSvr_IP = $global:roomDefaults.RecorderSvr_IP[0] }
 
-            $c.DVD_IP = $row | Select-Object -ExpandProperty IP_DVDPlayer
+    $c.DVD_IP = $row | Select-Object -ExpandProperty IP_DVDPlayer
+    if(-not $c.DVD_IP.length) { $c.DVD_IP = $global:roomDefaults.DVD_IP }
 
-            $c.MuteGW_IP = $row | Select-Object -ExpandProperty IP_AudicueGW
+    $c.MuteGW_IP = $row | Select-Object -ExpandProperty IP_AudicueGW
+    if(-not $c.MuteGW_IP.length) { $c.MuteGW_IP = $global:roomDefaults.MuteGW_IP }
 
-            $c.PTZCam_IP = $row | Select-Object -ExpandProperty IP_PTZCams 
-            $c.PTZCam_IP = $c.PTZCam_IP[0].split('~')
+    $c.PTZCam_IP = $row | Select-Object -ExpandProperty IP_PTZCams 
+    if(-not $c.PTZCam_IP.length) { $c.PTZCam_IP = $global:roomDefaults.PTZCam_IP[0] }
+
+    
+    if($i -ne 2)
+    {
+        $c.Panel_IP = $c.Panel_IP[0].split('~')
+        $c.FileName_VTZ = $c.FileName_VTZ[0].split('~')
+
+        # do the thing for multiple panels
+
+        $c.FixedCam_IP = $c.FixedCam_IP[0].split('~')
+        $c.DSP_IP = $c.DSP_IP[0].split('~')    
+        $c.RecorderSvr_IP = $c.RecorderSvr_IP[0].split('~')
+        $c.PTZCam_IP = $c.PTZCam_IP[0].split('~')
+    }
+
+    return $c
 }
+
 function importFile([string]$fileName)
 {
-   
     if([System.IO.File]::Exists("$fileName"))
     {
         $global:sheet = Import-csv $fileName
         $sheetLen = $sheet | Measure-Object | Select-Object -ExpandProperty Count
-        fErr "File import successful. File name: $fileName." $false
+        fErr "File import successful." $false
+        fErr "File name: $fileName." $false
         fErr "Number of data lines found: $sheetLen" $false
     }
     else
     {
-        fErr "File import failed. File name: $filename." $true
+        fErr "File import failed. File not found: $filename." $true
     }
 
     $global:rooms = @{}
     $global:roomsByName = @{}
 
-
-    $c = New-Object -TypeName Courtroom
-
-
     $i = 1
-
-    
-
+      
     foreach($row in $sheet)
-    {
-        # $i is initialized to 2. As this value will be the dict key, and we want that to match the .csv line number (for convenience),
-        #     we will start the loop by adding 1.
-        #     Ergo, the first dict entry will be     (2, $c) 
-     
-        $i += 1
+    {     
+        $i++
 
         try
         {
             $c = new-object -TypeName Courtroom
- 
-            $c.Index = $i           
-            # $c.CommentLine = $row | Select-object -ExpandProperty Ignore_Line
-
-            $c.RoomName = $row | Select-object -ExpandProperty Room_Name
-            $c.FacilityName = $row | select-object -ExpandProperty Facility_Name
-
-            $c.Subnet = $row | select-object -ExpandProperty Subnet_Address
-
-            $c.Processor_IP = $row | Select-object -ExpandProperty Processor_IP
-            $c.FileName_LPZ = $row | Select-object -ExpandProperty FileName_LPZ
-            if($c.FileName_LPZ[0].length > 0)
+            if($i -eq 2)
             {
-                $c.localLPZFile = $True
+                $global:roomDefaults = new-object -TypeName Courtroom
+                $global:roomDefaults = parseLine $c. $i $row  
+                fErr ("Import: parsed defaults line ({0:d3})" -f $i) $false
             }
-
-            $c.Panel_IP = $row | Select-object -ExpandProperty Panel_IP
-            $c.Panel_IP = $c.Panel_IP[0].split('~')
-            $c.FileName_VTZ = $row | Select-object -ExpandProperty FileName_VTZ
-            $c.FileName_VTZ = $c.FileName_VTZ[0].split('~')
-            if($c.FileName_VTZ[0].length > 0)
+            else
             {
-                $c.localVTZFile = $True
+                $c = parseLine $c $i $row
+
+                $rooms[$c.Index] = $c
+                # $roomsByName[$c.RoomName] = $rooms[$c.Index]
+
+                $global:NumOfRooms++
+                fErr ("Import: parsed data line ({0:d3})" -f $i) $false
             }
-
-            $c.ReporterWebSvc_IP = $row | Select-object -ExpandProperty IP_ReporterWebSvc
-
-            $c.Wyrestorm_IP = $row | Select-Object -ExpandProperty IP_WyrestormCtrl
-
-            $c.FixedCam_IP = $row | Select-object -ExpandProperty IP_FixedCams
-            $c.FixedCam_IP = $c.FixedCam_IP[0].split('~')
-            
-            $c.DSP_IP = $row | Select-object -ExpandProperty IP_DSPs
-            $c.DSP_IP = $c.DSP_IP[0].split('~')
-
-            $c.RecorderSvr_IP = $row | Select-object -ExpandProperty IP_Recorders
-            $c.RecorderSvr_IP = $c.RecorderSvr_IP[0].split('~')
-
-            $c.DVD_IP = $row | Select-Object -ExpandProperty IP_DVDPlayer
-
-            $c.MuteGW_IP = $row | Select-Object -ExpandProperty IP_AudicueGW
-
-            $c.PTZCam_IP = $row | Select-Object -ExpandProperty IP_PTZCams 
-            $c.PTZCam_IP = $c.PTZCam_IP[0].split('~')
-
-            $rooms[$c.Index] = $c
-            $roomsByName[$c.RoomName] = $rooms[$c.Index]
-
-            $global:NumOfRooms += 1
-
         }
         catch
         {
-            Write-Host -f Red ("import failed for line " + $i)
+            fErr ("File import failed for line {0:d3}." -f $i) $true
         }
     }
     if($NumOfRooms -gt 0)
     {
         $global:FileLoaded = $true
 
-        return "It worked."
+        fErr ("Import: success. {0} rooms found." -f $NumOfRooms) $false
     }
 }
 
