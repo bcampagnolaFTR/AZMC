@@ -1,2 +1,16 @@
-﻿Ignore_Line,Room_Name,Facility_Name,Subnet_Address,Processor_IP,FileName_LPZ,Panel_IP,FileName_VTZ,IP_ReporterWebSvc,IP_WyrestormCtrl,IP_FixedCams,IP_DSPs,IP_Recorders,IP_DVDPlayer,IP_AudicueGW,IP_PTZCams
-,BostonTestLab,UrMomsHouse,192.168.11.,13,AZMC_v3.02.01.lpz,26,AZMC_TSW1060_v3.02.01.vtz,10,18,20~21~22~23,15~16~17,11~12,46,19,25
+﻿Room_Name,Facility_Name,Subnet_Address,Processor_IP,FileName_LPZ,Panel_IP,FileName_VTZ,IP_ReporterWebSvc,IP_WyrestormCtrl,IP_FixedCams,IP_DSPs,IP_Recorders,IP_DVDPlayer,IP_AudicueGW,IP_PTZCams,Notes
+Defaults,,,13,AZMC_v3.02.01.lpz,26,AZMC_TSW1060_v3.02.01.vtz,10,18,20~21~22~23,15~16~17,11~12,46,19~20,25,
+A001,spaceStation,192.168.11,,,,,,,,,,,,,
+A002,,192.168.12,,,,,,,,,,,,,
+A003,,192.168.13,,,,,,,,,,,,,
+A004,,192.168.14,,,,,,,,,,,,,
+A005,,192.168.15,,,,,,,,,,,,,
+A006,,192.168.16,,AZMC_v3.02.06.lpz,,AZMC_TSW1060_v3.02.06.vtz,,,20~21~22,15~16,,0,,,No DVD player
+A007,,192.168.17,,AZMC_v3.02.06.lpz,,AZMC_TSW1060_v3.02.06.vtz,,,20~21~22,15~16,,0,,,No DVD player
+A008,,192.168.18,,,,,,,,,,,,,
+A009,,192.168.19,,,,,,,,,,,,,
+A010,,192.168.20,,,,,,,,,,,,,
+A011,,192.168.21,48,,59,,,,20~21~22~23~24,,,,,25~26,
+A012,,192.168.22,48,,59,,,,20~21~22~23~24,,,,,25~26,
+A013,,192.168.23,48,AZMC_v3.02.07.lpz,59,AZMC_TSW1060_v3.02.07.vtz,,,20~21~22~23~24,,,,,,
+A014,,192.168.24,48,AZMC_v3.02.07.lpz,59,AZMC_TSW1060_v3.02.07.vtz,,,20~21~22~23~24,,,,,,
