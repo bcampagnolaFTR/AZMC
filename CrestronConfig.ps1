@@ -548,7 +548,7 @@ function sendProcIPT
         # Connect to Device w/o SSH
         try
         {
-            $SessID = Open-CrestronSession -Device $r.Processor_IP # -ErrorAction SilentlyContinue
+            $SessID = Open-CrestronSession -Device ("{0}.{1}" -f $r.Subnet, $r.Processor_IP) # -ErrorAction SilentlyContinue
             fErr ("ProcIPT: Open-CrestronSession for room {1:d3} successful. SessionID: {0}" -f $SessID, $target) $False
         }
         catch
