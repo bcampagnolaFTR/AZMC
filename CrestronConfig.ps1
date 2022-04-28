@@ -3,6 +3,7 @@
 #>
 
 
+
 #####################################################################################################################
 <#
     Globals
@@ -17,7 +18,6 @@ $global:Pass = "Fortherecord123!"
 
 # This value needs to be copied while the script is running. It doesn't work if you run the script, and then try to reference the value from console
 $global:ScriptPath = $PSScriptRoot + '\'
-$global:DataFileName = "AZMC_CourtroomData.csv"
 $global:SelectedFile = ""
 $global:FileLoaded = $false
 $global:numOfRooms = 0
@@ -35,6 +35,26 @@ $global:defaults = @{}
 #>
 #####################################################################################################################
 
+function fPrettyPrintRooms([int]$h=20, [int]$w=15)
+{
+    
+    $a = $global:rooms.keys | sort
+    $col = [math]::ceiling($a.count / $h)
+    $b = $a | ForEach-Object { ("{0:d3}. {1}"-f $_, $global:rooms[[int]$_].roomname).PadRight($w) }
+
+    $b | Format-Wide {$_} -Force -Column $col 
+}
+
+function showAllRooms
+{
+    $e = $global:rooms.keys | sort
+
+    foreach($r in $e)
+    {
+        write-host -b black -f green ("{0:d3}. {1}" -f $r, $global:rooms[$r].RoomName) 
+    }
+}
+
 function removeWhitespace([string]$s)
 {
     return ($s -replace ' ','')
@@ -47,7 +67,6 @@ function fClear($ms = 100)
 }
 
 fClear
-
 
 function fatal
 {
@@ -147,10 +166,12 @@ function tryImport
     try
     {
         Import-Module PSCrestron -ErrorAction Stop
+        fErr ("Init: Successfully imported PSCrestron module.") $false
         return 0
     }
     catch 
     { 
+        fErr ("Init: Failed to import PSCrestron module.") $false
         return 1 
     }
 }
@@ -358,11 +379,12 @@ function importFile([string]$fileName)
     }
     else
     {
-        fErr ("Import: File import failed.") $true
+        fErr ("Import: File import failed.  {0}"-f $Error[0]) $true
         return
     }
 
     $global:rooms = @{}
+    $global:numOfRooms = 0
     $i = 1
       
     foreach($row in $sheet)
@@ -402,7 +424,7 @@ function importFile([string]$fileName)
     }
     if($global:numOfRooms -gt 0)
     {
-        $FileLoaded = $true
+        $global:FileLoaded = $true
         fErr ("Import: File import success. {0} rooms parsed." -f $global:numOfRooms) $false
     }
 }
@@ -428,93 +450,57 @@ function selectAndImport
 #####################################################################################################################
 
 
-function showAllRooms
-{
-    $e = $global:rooms.keys | sort
-
-    foreach($r in $e)
-    {
-        write-host -b black -f green ("{0:d3}. {1}" -f $r, $global:rooms[$r].RoomName) 
-    }
-}
-
-function getRangeOfRooms
-{
-    Write-host -f yellow "Which rooms do you want to target? (e.g. '3,9-12,17,16')`n"
-    Write-host -f green "  *  to target all rooms"
-    write-host -f green "  b  to go back`n"
-    return (read-host " ")
-}
-
-function verifyRangeChars([string]$s)
-{
-    # regex could improve this a lot
-    # https://stackoverflow.com/questions/23697408/powershell-get-number-from-string
-    $validChars = "0123456789,-".ToCharArray()
-    $bad = ""
-
-    foreach($c in $s.ToCharArray())
-    {
-        if($c -notin $validChars)
-        {
-            $bad += $c
-        } 
-    }
-    return $bad
-}
-
 function decodeRange([string]$s)
 {
     $s = removeWhitespace($s)
     
     if($s -ieq "b")
     {
-        continueScript
+        return ""
     }
     elseif($s -ieq "*")
     {
-        $r = @()
-        foreach($k in $global:rooms.keys)
-        {
-            $r += $k
-        }
+        $r = $global:rooms.keys | sort
         fErr ("Target: User selected to target all (`'*`') rooms. {0} rooms added." -f $r.length) $false
         return [string[]]$r
     }
     # target the specified rooms
     else
     {
-        $badChars = verifyRangeChars($s)
-        if($badChars.Length -eq 0)
+        $badChars = $s -replace "[0-9-,]",""
+        if(-not [bool]$badChars)
         {
             $r = @()
             $segments = $s.split(',')
 
             foreach($segment in $segments)
             {
-                if($segment.contains('-'))
+                $c = $segment.split('-').count
+                if($c -eq 2)
                 {
                     $v = $segment.split('-')
                     $r += [int]$v[0]..[int]$v[1]                    
                 }
-                else
+                elseif($c -eq 1)
                 {
                     $r += [int]$segment
                 }
+                else
+                {
+                    fErr ("MenuFunc: Syntax error in selection range. This is invalid: '{0}'" -f $segment) $true
+                }
             }
-            # Write-Host $r
             return $r
         }
         else
         {
-            Write-Host -f Red "Invalid characters:`n"   #throw the errors
-            Write-Host -f Red $badChars 
+            fErr ("MenuFunc: User entered invalid characters '{0}'" -f $badChars)
             return ""
         }
     }
 }
 
-function fIPTSend($SessID, [int]$IPID, $ipaddr)
+function fIPTSend($SessID, [int]$IPID, $ipaddr, $target)
 {
     $AddPeer = "AddP 0x{0:X} {1}" -f $IPID, $ipaddr
     # Write-Host -b black -f Green $addpeer
@@ -522,10 +508,12 @@ function fIPTSend($SessID, [int]$IPID, $ipaddr)
     try
     {
         $response = Invoke-CrestronSession $SessID -Command ("{0}" -f $AddPeer)
+        fErr ("ProcIPT: Successfully sent IPID 0x{0:x2} IPAddr {1} to the processor in room {2:d3}." -f $ipid, $ipaddr, $target) $false
         return $false
     }
     catch
     {
+        fErr ("ProcIPT: Failed to commit IPID {0} IPAddr {1} to the processor in room {2:d3}." -f $ipid, $ipaddr, $target) $true         
         return $true
     }
 }
@@ -543,32 +531,13 @@ function fIPT ($SessID, [int]$ipid, $sub, $node, $target)
     foreach($n in $node)
     {
         $ipaddr = fIPAddr $sub $n
-
-        $result = fIPTSend $SessID $ipid $ipaddr
-        if(-not $result)
-        {
-            fErr ("ProcIPT: Successfully sent IPID 0x{0:x2} IPAddr {1} to the processor in room {2:d3}." -f $ipid, $ipaddr, $target) $false
-        }
-        else
-        {
-            fErr ("ProcIPT: Failed to commit IPID {0} IPAddr {1} to the processor in room {2:d3}." -f $ipid, $ipaddr, $target) $true         
-        }
+        $result = fIPTSend $SessID $ipid $ipaddr $target
         $ipid++
     }
 }
 
-function sendProcIPT
+function sendProcIPT ([int[]]$targets)
 {    
-    showAllRooms
-    write-host -f yellow -b black "`nSend processor IP table:"
-
-    $targets = decodeRange(getRangeOfRooms)
-    if(-not $targets)
-    {
-        fErr "ProcIPT: No rooms were targeted." $true
-        return
-    }
-    
     # Write-Host -b red "Target rooms: $targets"
     foreach($target in $targets)
     {
@@ -591,58 +560,26 @@ function sendProcIPT
             }
         }
         # Connect to Device -secure
-        try
-        {
-            $ipaddr = fIPAddr $r.subnet (fDefault $r.Processor_IP $d.Processor_IP)
-            $SessID = Open-CrestronSession -Device $ipaddr -Secure # -Username $User -Password $Pass #-ErrorAction SilentlyContinue
+        $ipaddr = fIPAddr $r.subnet (fDefault $r.Processor_IP $d.Processor_IP)
+        $SessID = fCrestronStartSession $ipaddr $target
 
-            fErr ("ProcIPT: Open-CrestronSession for room {1:d3} successful. SessionID: {0}" -f $SessID, $target) $False
-        }
-        catch
-        {
-            fErr ("ProcIPT: Open-CrestronSession failed for room {0:d3}." -f $target) $True  
-            continue 
-        }
-
-        # Hostname
-        try
-        {
-            $hostnameResponse = Invoke-CrestronSession $SessID "hostname"
-            $deviceHostname = [regex]::Match($hostnameResponse, "(?<=Host\sName:\s)[\w-]+").value
-            fErr ("ProcIPT: Retrieved hostname `'{0}`' from the {1:d3} processor." -f $deviceHostname, $target) $false
-        }
-        catch
-        {
-            fErr ("ProcIPT: Processor in room {0:d3} failed to respond with a valid hostname." -f $target) $True
-            fErr ("ProcIPT: Attetmpting to continue with loading the IP table.") $True
-        }
-
-        # Send Crestron Program to Processor Secure
-        # Send-CrestronProgram -ShowProgress -Device $ProcIP -LocalFile $LPZPath
-
+        if($SessID -eq $null) { continue } 
 
 
         # FTR ReporterWebSvc
         fIPT $SessID 0x05 $sub (fDefault $r.ReporterWebSvc_IP $d.ReporterWebSvc_IP) $target
-
         # Wyrestorm Ctrl
         fIPT $SessID 0x06 $sub (fDefault $r.Wyrestorm_IP $d.Wyrestorm_IP) $target          
-
         # Fixed Cams
         fIPT $SessID 0x07 $sub (fDefault $r.FixedCam_IP $d.FixedCam_IP) $target
- 
         # DSPs
         fIPT $SessID 0x0d $sub (fDefault $r.DSP_IP $d.DSP_IP) $target
-
         # FTR Recorders
         fIPT $SessID 0x18 $sub (fDefault $r.RecorderSvr_IP $d.RecorderSvr_IP) $target
-
         # DVD Player
         fIPT $SessID 0x1a $sub (fDefault $r.DVD_IP $d.DVD_IP) $target
-
         # Mute Gateways
         fIPT $SessID 0x20 $sub (fDefault $r.MuteGW_IP $d.MuteGW_IP) $target
-
         #PTZ Cams
         if($r.PTZCam_IP -ieq "0")
         {
@@ -657,96 +594,54 @@ function sendProcIPT
                 foreach($n in $l)
                 {
                     $ipaddr = fIPAddr $sub $n
-
-                    $result = fIPTSend $SessID $ipid $ipaddr
-                    if(-not $result)
-                    {
-                        fErr ("ProcIPT: Successfully sent IPID 0x{0:x2} IPAddr {1} to the processor in room {2:d3}." -f [int]$ipid, $ipaddr, $target) $false
-                    }
-                    else
-                    {
-                        fErr ("ProcIPT: Failed to commit IPID 0x{0:x2} IPAddr {1} to the processor in room {2:d3}." -f [int]$ipid, $ipaddr, $target) $true         
-                    }
+                    $result = fIPTSend $SessID $ipid $ipaddr $target
                     $ipid++
 
-                    $result = fIPTSend $SessID $ipid $ipaddr
-                    if(-not $result)
-                    {
-                        fErr ("ProcIPT: Successfully sent IPID 0x{0:x2} IPAddr {1} to the processor in room {2:d3}." -f [int]$ipid, $ipaddr, $target) $false
-                    }
-                    else
-                    {
-                        fErr ("ProcIPT: Failed to commit IPID 0x{0:x2} IPAddr {1} to the processor in room {2:d3}." -f [int]$ipid, $ipaddr, $target) $true         
-                    }
+                    $result = fIPTSend $SessID $ipid $ipaddr $target
                     $ipid++
                 }
             }
         }
 
-        # Reset Program
-        try
-        {
-            Invoke-CrestronSession $SessID 'progreset -p:01'
-            fErr ("ProcIPT: Restarting program for room {0:d3}." -f $target) $False
-        }
-        catch
-        {
-            fErr ("ProcIPT: Program restart failed for room {0:d3}." -f $target) $True
-        }
-
-        # Close Session
-        try
-        {
-            Close-CrestronSession $SessID
-            fErr ("ProcIPT: Close-CrestronSession successful for room {0:d3}." -f $target) $False
-        }
-        catch
-        {
-            fErr ("ProcIPT: Close-CrestronSession failed for room {0:d3}, `$SessID {1}." -f $target, $SessID) $True
-        }
+        fCrestronRestartProg $SessID $target
+        fCrestronCloseSession $SessID $target
     }
 }
 
 
-function sendProcLPZ
+function sendProcLPZ ([int[]]$targets)
 {
-    showAllRooms
-
-    write-host -f yellow -b black "`nSend .lpz file:"
-    $targets = decodeRange(getRangeOfRooms)
     if(-not $targets)
     {
         fErr "ProcLPZ: No rooms were targeted." $true
         return
     }
+
+    write-host -f yellow "`nSend IP table?  y/n`n"
+    write-host -f green "  b  to go back`n"
+    $s = ""
+    while(-not "ynbYNB" -contains $s)
+    {
+        $s = read-host " "
+    }
+    if("bB".contains($s))
+    {
+        return
+    }
+    elseif("yY".contains($s))
+    {
+        $sendIPT = $true
+    }
+    elseif("nN".contains($s))
+    {
+        $sendIPT = $false
+    }
     else
     {
-        write-host -f yellow "`nSend IP table?  y/n`n"
-        write-host -f green "  b  to go back`n"
-        $s = ""
-        while(-not "ynbYNB" -contains $s)
-        {
-            $s = read-host " "
-        }
-        if("bB".contains($s))
-        {
-            return
-        }
-        elseif("yY".contains($s))
-        {
-            $sendIPT = $true
-        }
-        elseif("nN".contains($s))
-        {
-            $sendIPT = $false
-        }
-        else
-        {
-            write-host -f red -b black "WTF sendProcLPZ"
-            return
-        }
+        write-host -f red -b black "WTF sendProcLPZ"
+        return
     }
-    # Write-Host -b red "Target rooms: $targets"
+
     foreach($target in $targets)
     {
         # check for
@@ -768,46 +663,24 @@ function sendProcLPZ
             }
         }
         # Connect to Device -secure
-        try
-        {
-            $ipaddr = fIPAddr $r.subnet (fDefault $r.Processor_IP $d.Processor_IP)
-            $SessID = Open-CrestronSession -Device $ipaddr -Secure # -Username $User -Password $Pass #-ErrorAction SilentlyContinue
+        $ipaddr = fIPAddr $r.subnet (fDefault $r.Processor_IP $d.Processor_IP)
+        
+        $SessID = fCrestronStartSession $ipaddr $target
 
-            fErr ("ProcLPZ: Open-CrestronSession for room {1:d3} successful. SessionID: {0}" -f $SessID, $target) $False
-        }
-        catch
-        {
-            fErr ("ProcLPZ: Open-CrestronSession failed for room {0:d3}." -f $target) $True  
-            continue 
-        }
-
-        # Hostname
-        try
-        {
-            $hostnameResponse = Invoke-CrestronSession $SessID "hostname"
-            $deviceHostname = [regex]::Match($hostnameResponse, "(?<=Host\sName:\s)[\w-]+").value
-            fErr ("ProcLPZ: Retrieved hostname `'{0}`' from the {1:d3} processor." -f $deviceHostname, $target) $false
-        }
-        catch
-        {
-            fErr ("ProcLPZ: Processor in room {0:d3} failed to respond with a valid hostname." -f $target) $True
-            fErr ("ProcLPZ: Attetmpting to continue with .lpz load.") $True
-        }
+        if($SessID -eq $null) { continue } 
 
         $lpzFile = fDefault $r.FileName_LPZ $d.FileName_LPZ
-        write-host -b black -f Yellow $ipaddr
-        write-host -b black -f green $lpzFile
         # Send Crestron Program to Processor Secure
         try
         {
             if($sendIPT)
             {
-                Send-CrestronProgram -ShowProgress -Device $ipaddr -LocalFile $lpzFile
-                fErr ("ProcLPZ: Successfully sent file '{0}' to room {1:d3} with IP table." -f $lpzFile, $target) $False
+                Send-CrestronProgram -ShowProgress -Device $ipaddr -LocalFile $lpzFile  |  Out-Null
+                fErr ("ProcLPZ: Successfully sent file '{0}' to room {1:d3} with IP table." -f $lpzFile, $target) $False   
             }
             else
             {
-                Send-CrestronProgram -ShowProgress -Device $ipaddr -LocalFile $lpzFile -DoNotUpdateIPTable
+                Send-CrestronProgram -ShowProgress -Device $ipaddr -LocalFile $lpzFile -DoNotUpdateIPTable  |  Out-Null
                 fErr ("ProcLPZ: Successfully sent file '{0}' to room {1:d3} without IP table." -f $lpzFile, $target) $False
             }
         }
@@ -817,37 +690,82 @@ function sendProcLPZ
             fErr ("ProcLPZ: Failed to send file '{0}' to room {1:d3}." -f $lpzFile, $target) $True
         }
 
+        fCrestronRestartProg $SessID $target
+        fCrestronCloseSession $SessID $target
+    }
+}
 
-        # Reset Program
-        try
+function fCrestronStartSession($ipaddr, $target, [bool]$secure=$true)
+{
+    try
+    {
+        if($secure)
         {
-            Invoke-CrestronSession $SessID 'progreset -p:01'
-            fErr ("ProcLPZ: Restarting program for room {0:d3}." -f $target) $False
+            $SessID = Open-CrestronSession -Device $ipaddr -Secure # -Username $User -Password $Pass #-ErrorAction SilentlyContinue    
         }
-        catch
+        else
         {
-            fErr ("ProcLPZ: Program restart failed for room {0:d3}." -f $target) $True
+            $SessID = Open-CrestronSession -Device $ipaddr # -Username $User -Password $Pass #-ErrorAction SilentlyContinue            
         }
+        fErr ("PSCrestron: Open-CrestronSession for room {1:d3} successful. SessionID: {0}" -f $SessID, [int]$target) $False
+        return $SessID
+    }
+    catch
+    {
+        fErr ("PSCrestron: Open-CrestronSession failed for room {0:d3}." -f [int]$target) $True  
+        return $null
+    }
+}
 
-        # Close Session
-        try
-        {
-            Close-CrestronSession $SessID
-            fErr ("ProcLPZ: Close-CrestronSession successful for room {0:d3}." -f $target) $False
-        }
-        catch
-        {
-            fErr ("ProcLPZ: Close-CrestronSession failed for room {0:d3}, `$SessID {1}." -f $target, $SessID) $True
-        }
+function fCrestronRestartProg ($SessID, $target)
+{
+    # Reset Program
+    try
+    {
+        Invoke-CrestronSession $SessID 'progreset -p:01'
+        fErr ("PSCrestron: Restarting program for room {0:d3}." -f [int]$target) $False
+    }
+    catch
+    {
+        fErr ("PSCrestron: Program restart failed for room {0:d3}." -f [int]$target) $True
+    }
+}
+
+function fCrestronCloseSession ($SessID, $target)
+{
+    # Close Session
+    try
+    {
+        Close-CrestronSession $SessID
+        fErr ("PSCrestron: Close-CrestronSession successful for room {0:d3}." -f [int]$target) $False
+    }
+    catch
+    {
+        fErr ("PSCrestron: Close-CrestronSession failed for room {0:d3}, `$SessID {1}." -f [int]$target, $SessID) $True
     }
 }
 
 
+
+
+
 ######################################################################################################
 ######################################################################################################
 ######################################################################################################
 
-
+function fGetRange
+{   
+    Write-host -f yellow "Which rooms do you want to target? (e.g. '3,9-12,17,16')`n"
+    Write-host -f green "  *  to target all rooms"
+    write-host -f green "  b  to go back`n"
+    $input = read-host " "
+    $targets = decodeRange $input
+    if(-not $targets)
+    {
+        fErr "ProcIPT: No rooms were targeted." $true
+    }
+    return $targets
+}
 
 function showInfo
 {
@@ -857,10 +775,10 @@ function showInfo
         $s = $global:SelectedFile
     }
     $data = ""
-    $data = (".csv file: " + $s + "`n") 
-    $data += ("num of rooms loaded: " + $NumOfRooms + "`n")
+    $data =  ("Info: .CSV file:  {0}`n" -f $s) 
+    $data += ("Info:  Qty of rooms loaded:  {0}`n" -f $global:NumOfRooms)
 
-    Write-host -b black -f yellow $data
+    Write-host -b black -f green $data
 }
 
 <######################################################################################################
@@ -892,38 +810,54 @@ function getCommand
 
     if($choice -ieq '1')
     {
+        fClear
         $result = selectAndImport
         continueScript
     }
     elseif($choice -ieq '2')
     {
-        sendProcLPZ
+        fClear
+        fPrettyPrintRooms
+        write-host -f yellow -b black "`nSend processor IP table:"
+        $targets = fGetRange
+        
+        sendProcLPZ $targets
         continueScript 
     }
     elseif($choice -ieq '3')
     {
-        sendProcIPT
+        fClear
+        fPrettyPrintRooms
+        write-host -f yellow -b black "`nSend processor IP table:"
+        $targets = fGetRange
+
+        sendProcIPT $targets
         continueScript
     }
     elseif($choice -ieq '4')
     {
+        fClear
         continueScript
     }
     elseif($choice -ieq '5')
     {
+        fClear
         continueScript
     }
     elseif($choice -ieq '6')
     {
+        fClear
         continueScript
     }
     elseif($choice -ieq 'i')
     {
+        fClear
         showInfo
         continueScript
     }
     elseif($choice -ieq 'x')
     {
+        # poll IP table for accuracy and connectivity
         exit
     }
     else
