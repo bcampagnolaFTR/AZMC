@@ -521,6 +521,8 @@ function parseLine($c, $i, $row)
         $c.isDef = $c.Default.contains("*")
         $c.defIndex = [int]($c.default -replace "[^0-9]", "")
 
+        #$c.Host = $row | select-object -Expandproperty Hostname_Prefix
+
         $c.FacilityName = $row | select-object -ExpandProperty Facility_Name
         $c.Subnet = $row | select-object -ExpandProperty Subnet_Address
 
@@ -638,6 +640,10 @@ function fParseCSV($sheet)
         $global:FileLoaded = $true
         fErr ("Import: File import success. Parsed {1} default lines and {0} rooms." -f $global:numOfRooms, $global:numOfDefaults) $false
     }
+    else
+    {
+        $global:FileLoaded = $false
+    }
 }
 
 
@@ -704,7 +710,6 @@ function fCrestronStartSession($ipaddr, $target, [bool]$secure=$true)
         return $null
     }
 }
-
 
 function fCrestronRestartProg ($SessID, $target)
 {
@@ -794,7 +799,7 @@ function fShowInfo
 }
 
 
-# Send IPT
+# Send Processor IPT
 ######################################################################################################
 
 function fIPTSend($SessID, [int]$IPID, $ipaddr, $target)
@@ -907,7 +912,48 @@ function fSendProcIPT ([int[]]$targets)
 }
 
 
-# Set Auth
+# Send Panel IPT
+######################################################################################################
+
+function fSendPanelIPT ([int[]]$targets)
+{    
+    # Write-Host -b red "Target rooms: $targets"
+    foreach($target in $targets)
+    {
+        # check for
+        if($target -notin $global:rooms.keys)
+        {
+            fErr ("PanelIPT: Target room {0:d3} is not in the list of rooms." -f $target) $True
+            continue
+        }
+        $r = $global:rooms[$target]
+        $sub = $r.Subnet
+
+        $d = $null
+
+        if($r.defIndex -gt 0)
+        {
+            if($global:defaults.ContainsKey($r.defIndex))
+            {
+                $d = $global:defaults[$r.defIndex]
+            }
+        }
+        # Connect to Device -secure
+        $ipaddr = fIPAddr (fDefault $r.subnet $d.subnet) (fDefault $r.Processor_IP $d.Processor_IP)
+        $SessID = fCrestronStartSession $ipaddr $target
+
+        if($SessID -eq $null) { continue } 
+
+        # FTR ReporterWebSvc
+        fIPT $SessID 0x05 $sub (fDefault $r.ReporterWebSvc_IP $d.ReporterWebSvc_IP) $target
+       
+        fCrestronRestartProg $SessID $target
+        fCrestronCloseSession $SessID $target
+    }
+}
+
+
+# Set Authentication
 ######################################################################################################
 
 function fTestCredentialsProc ($ipaddr)
@@ -957,6 +1003,7 @@ function fTestCredentials ($ipaddr, $type)
     return $result
 }
 
+
 function fSetAuthentication ($targets)
 {
     if(-not $targets)
@@ -986,7 +1033,7 @@ function fSetAuthentication ($targets)
     }
     else
     {
-        write-host -f red -b black ("WTF sendProcLPZ??  Response: {0}" -f $s)
+        write-host -f red -b black ("WTF SetAuth??  Response: {0}" -f $s)
         return
     }
 
@@ -1002,7 +1049,7 @@ function fSetAuthentication ($targets)
             }
             else
             {
-                fErr ("ProcLPZ: Room {0} {1} code send is attempting to use data from default line {2}, which does not exist." -f $target, $r.roomname, $r.defIndex) $true
+                fErr ("SetAuth: Room {0} {1} code send is attempting to use data from default line {2}, which does not exist." -f $target, $r.roomname, $r.defIndex) $true
             }
         }
 
@@ -1158,8 +1205,6 @@ function fSendPanelVTZ ($targets)
 
         $r = $global:rooms[$target]
 
-        $r
-
         if($r.defIndex -gt 0)
         {
             if($global:defaults.ContainsKey($r.defIndex))
@@ -1171,8 +1216,6 @@ function fSendPanelVTZ ($targets)
                 fErr ("PanelVTZ: Attempting to use data from default line {2} with room {0} {1}. Default line does not exist." -f $target, $r.roomname, $r.defIndex) $true
             }
         }
-
-        $d
 
         # ip address
         $ips = [int[]](fDefault $r.Panel_IP $d.Panel_IP)
@@ -1242,6 +1285,16 @@ function fCommandImportCSV
     }
 }
 
+function fFileLoaded
+{
+    return $global:FileLoaded
+}
+
+function fLoadFileDirective
+{
+    Write-Host -f yellow "Please load a valid .csv file first."
+}
+
 
 # Get User Command
 ######################################################################################################
@@ -1261,10 +1314,17 @@ function getCommand
     elseif($choice -ieq '2')
     {
         fClear
-        fPrettyPrintRooms
-        write-host -f yellow -b black "`nLoad processor code (.lpz / .cpz file) :"
+        if(fFileLoaded)
+        {
+            fPrettyPrintRooms
+            write-host -f yellow -b black "`nLoad processor code (.lpz / .cpz file):"
         
-        fSendProcLPZ (fGetRangeOfRooms)
+            fSendProcLPZ (fGetRangeOfRooms)
+        }
+        else
+        {
+            fLoadFileDirective
+        }
 
         continueScript 
     }
@@ -1272,10 +1332,17 @@ function getCommand
     elseif($choice -ieq '3')
     {
         fClear
-        fPrettyPrintRooms
-        write-host -f yellow -b black "`nSend processor IP table:"
+        if(fFileLoaded)
+        {
+            fPrettyPrintRooms
+            write-host -f yellow -b black "`nSend processor IP table:"
         
-        fSendProcIPT (fGetRangeOfRooms)
+            fSendProcIPT (fGetRangeOfRooms)
+        }
+        else
+        {
+            fLoadFileDirective
+        }
 
         continueScript
     }
@@ -1283,9 +1350,16 @@ function getCommand
     elseif($choice -ieq '4')
     {
         fClear
-        fPrettyPrintRooms
-        write-host -f yellow -b black "`nSend touch panel file (.vtz) :"
-        fSendPanelVTZ (fGetRangeOfRooms)
+        if(fFileLoaded)
+        {
+            fPrettyPrintRooms
+            write-host -f yellow -b black "`nSend touch panel file (.vtz) :"
+            fSendPanelVTZ (fGetRangeOfRooms)
+        }
+        else
+        {
+            fLoadFileDirective
+        }
 
         continueScript
     }
@@ -1293,26 +1367,92 @@ function getCommand
     elseif($choice -ieq '5')
     {
         fClear
+        if(fFileLoaded)
+        {
+            fPrettyPrintRooms
+            write-host -f yellow -b black "`nSend touch panel IP table:"
+        
+            fSendPanelIPT (fGetRangeOfRooms)
+        }
+        else
+        {
+            fLoadFileDirective
+        }
+
         continueScript
     }
+    <#
     # Set Device Hostnames
     elseif($choice -ieq '6')
     {
         fClear
+        if(fFileLoaded)
+        {
+        }
+        else
+        {
+            fLoadFileDirective
+        }
+
         continueScript
-    }
+    }#>
     # Set Authentication Mode
-    elseif($choice -ieq 'i')
+    elseif($choice -ieq '6')
     {
         fClear
-        $result = fShowInfo
+        if(fFileLoaded)
+        {
+        }
+        else
+        {
+            fLoadFileDirective
+        }
+
         continueScript
     }
     # Get Device Status
+    elseif($choice -ieq '7')
+    {
+        fClear
+        if(fFileLoaded)
+        {
+        }
+        else
+        {
+            fLoadFileDirective
+        }
+
+        continueScript
+    }
+    # Get Info
+    elseif($choice -ieq 'i')
+    {
+        if(fFileLoaded)
+        {
+            fClear
+            $result = fShowInfo
+        }
+        else
+        {
+            fLoadFileDirective
+        }
+
+        continueScript
+    }
+    # Exit Script
     elseif($choice -ieq 'x')
     {
-        # poll IP table for accuracy and connectivity
-        exit
+        if(fFileLoaded)
+        {
+            # poll IP table for accuracy and connectivity
+            exit
+        }
+        else
+        {
+            fLoadFileDirective
+        }
+
+        continueScript
     }
     else
     {
@@ -1326,16 +1466,26 @@ function updateShell
     $data += "-------------------------------------------------"
     Write-Host -f Yellow $data
 
-    $data  = "1) Load .csv file`n"
-    $data += "2) Load processor code`n"
+    $data  = "1) Load .csv file"
+    Write-Host -f Green $data
+    
+    $data  = "2) Load processor code`n"
     $data += "3) Send processor IP table`n"
     $data += "4) Load touch panel file`n"
     $data += "5) Send panel IP table`n"
-    $data += "6) Set hostnames`n"
-    $data += "7) Set authentication`n"
-    $data += "8) Get device status`n"
+    #$data += "6) Set hostnames`n"
+    $data += "6) Set authentication`n"
+    $data += "7) Get device status`n"
+    if(fFileLoaded)
+    {
+        Write-Host -f Green $data
+    }
+    else
+    {
+        Write-Host -f Gray $data
+    }
 
-    $data += "`ni) info`n"
+    $data  = "`ni) info`n"
     $data += "`nx) exit`n"
     Write-Host -f Green $data
 }
