@@ -92,7 +92,17 @@ function fValidateConnection ($t)
 
 function fIPAddr([string]$a, [string]$b)
 {
-    $ipa = ("{0}.{1}" -f $a, $b)
+    # if $a (subnet) has any string value, then use it
+    if($a)
+    {
+        $ipa = ("{0}.{1}" -f $a, $b)
+    }
+    # else if $a is empty, just return $b (otherwise we will end up sending back (".{0}" -f $b)
+    else
+    {
+        return $b
+    }
+    
     while($ipa -contains '..')
     {
         $ipa = $ipa.replace('..', '.')
@@ -112,7 +122,6 @@ function fDefault($a, $b)
 
 function fPrettyPrintRooms([int]$h=20, [int]$w=15)
 {
-    
     $a = $global:rooms.keys | sort
     $col = [math]::ceiling($a.count / $h)
     $b = $a | ForEach-Object { ("{0:d3}. {1}"-f $_, $global:rooms[[int]$_].roomname).PadRight($w) }
@@ -481,31 +490,89 @@ if($err -ne 0)
 <#    Data & File Import    #>
 #####################################################################################################################
 #region
+class CtrmParam
+{
+    [bool]$isUsed
+    [object]$val
+    [bool]$isDeviceIP
+    [bool]$isIPValid
+
+    CtrmParam ($val)
+    {
+        $this.val = $val
+        $this.isUsed = $false
+        $this.isDeviceIP = $false 
+        $this.isIPValid = $false
+    }    
+}
 
 class Courtroom
 {
-    [int]$Index
-    [string]$RoomName
-    [string]$Default
-    [bool]$isDef
-    [int]$defIndex
-    [string]$FacilityName
-    [string]$Subnet
-    [string]$Processor_IP
-    [string]$FileName_LPZ
-    [bool]$localLPZFile
-    [string[]]$Panel_IP
-    [string[]]$FileName_VTZ
-    [bool]$localVTZFile
-    [string]$ReporterWebSvc_IP
-    [string]$Wyrestorm_IP
-    [string[]]$FixedCam_IP
-    [string[]]$DSP_IP
-    [string[]]$RecorderSvr_IP
-    [string]$DVD_IP
-    [string]$MuteGW_IP
-    [string[]]$PTZCam_IP
+    $RoomName = ""
+    $FacilityName = ""
+
+    $isDef = $false
+    $defIndex = 0
+
+    $Subnet = [CtrmParam]::new("")
+
+    $Processor_IP = [CtrmParam]::new("")
+    $FileName_LPZ = [CtrmParam]::new("")
+    $Panel_IP = [CtrmParam]::new([string[]]@())
+    $FileName_VTZ = [CtrmParam]::new([string[]]@())
+    $ReporterWebSvc_IP = [CtrmParam]::new("")
+    $Wyrestorm_IP = [CtrmParam]::new("")
+    $FixedCam_IP = [CtrmParam]::new([string[]]@())
+    $DSP_IP = [CtrmParam]::new([string[]]@())
+    $RecorderSvr_IP = [CtrmParam]::new([string[]]@())
+    $DVD_IP = [CtrmParam]::new("")
+    $MuteGW_IP = [CtrmParam]::new("")
+    $PTZCam_IP = [CtrmParam]::new([string[]]@())
+
     $IPTable = @{}
+
+    $data = @{}
+
+    Courtroom ($data, [int]$i)
+    {
+        $this.data = $data
+        $this.index = $i
+    }
+}
+
+function fSetDefaultValues([ref]$c, [int]$ri)
+{
+    if($global:defaults.ContainsKey($ri))
+    {
+        $r = $global:defaults[$ri]
+    }
+    else
+    {
+        return $false
+    }
+
+    # subnet
+    $c.value.subnet = fDefault $c.value.subnet $r.subnet
+    if(-not $c.value.subnet)
+    {
+        return $false
+    }
+
+    # proc IP
+    $c.value.Processor_IP = fIPAddr $c.value.subnet (fDefault $c.value.Processor_IP $r.Processor_IP)
+    if(-not (fValidateIPAddress $c.value.Processor_IP))
+    {
+        fErr ("ParseLine: Processor IP address for line {0} (room {1}) failed to validate.  {2}" -f $c.value.index, $c.value.roomname, $c.value.Processor_IP) $true
+    }
+    
+    # .lpz file
+    $c.value.fileName_LPZ = fDefault $c.value.fileName_LPZ $r.fileName_LPZ
+
+    # panel IPs
+    foreach($ip in $c.value.Panel_IP)
+    {
+        
+    }
 }
 
 function parseLine($c, $i, $row)
@@ -515,15 +582,12 @@ function parseLine($c, $i, $row)
     $c.Index = $i           
     try
     {
-        # should probably name every room uniquely, in case we want to create a $global:roomsByName hashtable
-        $c.RoomName = $row | select-object -ExpandProperty Room_Name
-        $c.Default = $row | select-object -ExpandProperty Defaults
-        $c.isDef = $c.Default.contains("*")
-        $c.defIndex = [int]($c.default -replace "[^0-9]", "")
+        $c.RoomName.val = $row | select-object -ExpandProperty Room_Name
+        
+        $d = $row | select-object -ExpandProperty Defaults
+        $c.isDef = $d.contains("*")
+        $c.defIndex = [int]($d -replace "[^0-9]", "")
 
-        #$c.Host = $row | select-object -Expandproperty Hostname_Prefix
-
-        $c.FacilityName = $row | select-object -ExpandProperty Facility_Name
         $c.Subnet = $row | select-object -ExpandProperty Subnet_Address
 
         # only 1 Proc_IP and 1 LPZ per room
@@ -581,6 +645,25 @@ function parseLine($c, $i, $row)
         fErr ("ParseLine: Failed to split multiple-value column in data row {0}.`n {1}" -f $i, $error) $true
     }
 
+    # set static vs default values
+    # if this is a regular data line with a valid default line reference index
+    try
+    {
+        if($c.defIndex -and (-not $c.isDef))
+        {
+            $defReturn = fSetDefaultValues ([ref]$c) $c.defIndex $c.index
+        }
+        else
+        {
+
+        }
+    }
+    catch
+    {
+
+    }
+
+
     return $c
 }
 
@@ -595,7 +678,6 @@ function fClearData
 function fParseCSV($sheet)
 {
     fClearData
-
     $i = 1
       
     foreach($row in $sheet)
@@ -604,10 +686,18 @@ function fParseCSV($sheet)
 
         try
         {
-            $c = new-object -TypeName Courtroom
-            $c = parseLine $c $i $row
+            $c = [Courtroom]::new($row, $i)
+            
+            # $parseResults should be $false for success, $true or "error text" for fail
+            $parseResults, $c = parseLine $c $i $row
 
-            if($c.isDef -eq $true)
+            if($parseResults)
+            {
+                # fErr
+                continue
+            }
+
+            if($c.isDef)
             {
                 if([bool]$c.defIndex)
                 {
@@ -616,18 +706,15 @@ function fParseCSV($sheet)
                 }
                 else
                 {
-                    fErr ("Import: Line {0:d3} failed." -f $i) $true
-                    #continue
+                    fErr ("Import: Line {0:d3} failed. Error in default index value." -f $i) $true
+                    continue
                 }
-
             }
             else
             {
-                $global:rooms[[int]$c.Index] = $c
-                # $roomsByName[$c.RoomName] = $rooms[$c.Index]
-
+                # add good room data to dict of rooms
+                $global:rooms[[int]$c.index] = $c
                 $global:numOfRooms++
-                # fErr ("Import: Parsed data line {0:d3}" -f $i) $false
             }
         }
         catch
