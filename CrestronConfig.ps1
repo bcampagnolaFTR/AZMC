@@ -470,7 +470,7 @@ fCreateLogFile
 
 Add-Type -AssemblyName System.Windows.Forms
 
-function tryImport
+function tryImportCrestron
 {
     try
     {
@@ -488,7 +488,7 @@ function tryImport
 
 $src = ""
 $dst = ""
-$err = tryImport
+$err = tryImportCrestron
 
 if($err -ne 0)
 {
@@ -505,12 +505,33 @@ if($err -ne 0)
         err 2
     }
 
-    $err = tryImport
+    $err = tryImportCrestron
     if($err -ne 0)
     {
         err 1
     }
 }
+
+
+function tryImportPoshSSH
+{
+    try
+    {
+        Import-Module -name Posh-SSH -ErrorAction Stop
+        fErr ("Init: Successfully imported Posh-SSH module.") $false
+        return 0
+    }
+    catch 
+    { 
+        fErr ("Init: Failed to import PSCrestron module.") $false
+        return 1 
+    }
+}
+   
+
+$err = tryImportPoshSSH
+
+
 
 #endregion
 
@@ -565,6 +586,7 @@ class Courtroom
 
     $subnet = ""
 
+    $isVC4_System = $false
     $Processor
     $Panels = @()
 
@@ -640,6 +662,7 @@ function fParseLine($c)
         $c.subnet = fDefault $row.Subnet_Address $d.Subnet_Address
 
         # Processor
+        $c.isVC4_System = [bool](fDefault $row.isVC4_System $d.isVC4_System)
         $ip = fDefault $row.Processor_IP $d.Processor_IP
         $c.Processor = [Device]::new((fIPAddr $c.subnet $ip))
         $c.Processor.setFileName((fDefault $row.FileName_LPZ $d.FileName_LPZ))
@@ -957,7 +980,12 @@ addusertogroup -n:ftr_admin -g:Administrators
 
 
 <#
-    SNMP                          Programmer          Enable/disable Simple Network Management Protocol    SNMPAccess                    Programmer          Configure Access Rights for SNMP Communities    SNMPALLOWall                  Programmer          Allows All SNMP Managers                    SNMPCONtact                   Programmer          Configure an SNMP manager                   SNMPLOCation                  Programmer          Configure an SNMP manager                   SNMPMANager                   Programmer          Configure an SNMP manager 
+    SNMP                          Programmer          Enable/disable Simple Network Management Protocol
+    SNMPAccess                    Programmer          Configure Access Rights for SNMP Communities
+    SNMPALLOWall                  Programmer          Allows All SNMP Managers                
+    SNMPCONtact                   Programmer          Configure an SNMP manager               
+    SNMPLOCation                  Programmer          Configure an SNMP manager               
+    SNMPMANager                   Programmer          Configure an SNMP manager 
 #>
 
 
@@ -1025,7 +1053,7 @@ function fShowInfo
 # Send Processor IPT
 ######################################################################################################
 
-function fIPTSend($SessID, [int]$ipid, $ipaddr, $target)
+function fSendProcIPT($SessID, [int]$ipid, $ipaddr, $target)
 {
     try
     {
@@ -1056,47 +1084,47 @@ function fSendProcIPT ([int[]]$targets)
 
         # FTR ReporterWebSvc
         $ipid = 0x05
-        $err = fIPTSend $SessID $ipid $r.ReporterWebSvc.ipaddr $target
+        $err = fSendProcIPT $SessID $ipid $r.ReporterWebSvc.ipaddr $target 
         
         # Wyrestorm Ctrl
         $ipid = 0x06
-        $err = fIPTSend $SessID $ipid $r.wyrestorm.ipaddr $target
+        $err = fSendProcIPT $SessID $ipid $r.wyrestorm.ipaddr $target 
         
         # Fixed Cams
         $ipid = 0x07
         for($i = 0; $i -lt $r.Fixed_Cams.length; $i++)
         {
-            $err = fIPTSend $SessID ($ipid+$i) $r.Fixed_Cams[$i].ipAddr $target
+            $err = fSendProcIPT $SessID ($ipid+$i) $r.Fixed_Cams[$i].ipAddr $target 
         }
         # DSPs
         $ipid = 0x0d
         for($i = 0; $i -lt $r.DSPs.length; $i++)
         {
-            $err = fIPTSend $SessID ($ipid+$i) $r.DSPs[$i].ipAddr $target
+            $err = fSendProcIPT $SessID ($ipid+$i) $r.DSPs[$i].ipAddr $target 
         }
 
         # FTR Recorders
         $ipid = 0x18
         for($i = 0; $i -lt $r.RecorderSvrs.length; $i++)
         {
-            $err = fIPTSend $SessID ($ipid+$i) $r.RecorderSvrs[$i].ipAddr $target
+            $err = fSendProcIPT $SessID ($ipid+$i) $r.RecorderSvrs[$i].ipAddr $target 
         }
         
         # DVD Player
         $ipid = 0x1a
-        $err = fIPTSend $SessID $ipid $r.DVD_Player.ipaddr $target
+        $err = fSendProcIPT$SessID $ipid $r.DVD_Player.ipaddr $target
         
         # Mute Gateways
         $ipid = 0x20
-        $err = fIPTSend $SessID $ipid $r.Mute_GW.ipaddr $target
+        $err = fSendProcIPT$SessID $ipid $r.Mute_GW.ipaddr $target 
         
         # PTZ Cams
         $ipid = 0x23
         for($i = 0; $i -lt $r.PTZ_Cams.length; $i++)
-        {
-            $err = fIPTSend $SessID ($ipid+$i) $r.PTZ_Cams[$i].ipAddr $target
+        { 
+            $err = fSendProcIPT$SessID ($ipid+$i) $r.PTZ_Cams[$i].ipAddr $target 
             $ipid++
-            $err = fIPTSend $SessID ($ipid+$i) $r.PTZ_Cams[$i].ipAddr $target
+            $err = fSendProcIPT$SessID ($ipid+$i) $r.PTZ_Cams[$i].ipAddr $target 
         }
 
         fCrestronRestartProg $SessID $target
@@ -1443,6 +1471,316 @@ function fLoadFileDirective
 }
 
 
+# Send IP table to VC-4 server
+######################################################################################################
+
+function fSelectRunningProgramList ($rmname, $progs)
+{
+    $i = 0
+    fClear
+    $directive = "`nThere are multiple running programs on the {0} server.`nWhich one needs the IP table update?`n`n" -f $rmname
+    write-host -f yellow $directive
+    foreach ($p in $progs)
+    {
+        $i ++
+        $item = "  {0}) {1}" -f $i, $p 
+        write-host -f green $item
+    }
+    write-host -f green "`n  b) to cancel"
+    Write-Host ""
+
+    while ($true)
+    {
+        $u = read-host " "
+        if("1234567890" -notmatch $u)
+        {
+            write-host "`n"
+        }
+        elseif([int]$u -gt $progs.count)
+        {
+            write-host "`n"
+        }
+        elseif($u -match "bB")
+        {
+            return $null
+        }
+        elseif($u -ieq 0)
+        {
+            return $null
+        }
+        else 
+        {
+            return [int]$u
+        }
+    }
+
+    return $null
+}
+<#
+function fSFTPGetItem ($sessID, $path)
+{
+    try
+    {
+        $ipt = Get-SFTPItem -SessionId $sessID -Path $path -Destination $env:
+    }
+    catch
+    {
+        fErr ("VC4IPT: Room {0}- {1}  failed to get item {2}." -f $target, $r.roomname, $path) $true
+        return $null
+    }
+    return $ipt
+}
+#>
+function fGetDipFile ($progName, $sessID)
+{
+    $dip = $null
+    $p = "/opt/crestron/virtualcontrol/RunningPrograms/{0}/App/" -f $progName
+    $files = Get-SFTPChildItem -SessionId $sessID $p
+    $files | ForEach-Object -Process {if($_.Name -match ".dip"){ $dip = $_.Name; return; }}
+
+    if(-not $dip)
+    {
+        return $null
+    }
+
+    #    need to get the dip file here
+}
+
+
+function fVC4AppendIPT ($ipt, $target)
+{
+    $tableIndex = 0
+    $completeTable = @{}
+
+    $addr = $null
+    $ipid = $null
+
+    $rows = $ipt.split('`n')
+    foreach($r in $rows)
+    {
+        if($r.contains('=') -and -not $r.contains('$'))
+        {
+            $id, $value = $r.split('=')
+
+            if($id -match "addr") { $addr = $value }
+            elseif($id -match "id") { $ipid = [int32]"0x$value" }
+            else { } #throw?
+
+            $id = int($id -replace '\D+(\d+)','$1')
+            if($id -gt $tableIndex) { $tableIndex = $id }
+            
+            if((-not $addr -is $null) -and (-not $ipid -is $null))
+            {
+                $completeTable[$ipid] = $addr
+                $ipid = $null
+                $addr = $null
+            } 
+        }
+        else {}
+    }   
+
+    # FTR ReporterWebSvc
+    $ipid = 0x05
+    $tableIndex ++
+    $completeTable[$ipid] = $r.ReporterWebSvc.ipaddr
+    $ipt = "{0}`nid{1}={2:X}`naddr{1}={3}" -f $ipt, $tableIndex, $ipid, $r.ReporterWebSvc.ipaddr
+
+    # Wyrestorm Ctrl
+    $ipid = 0x06
+    $tableIndex ++
+    $completeTable[$ipid] = $r.wyrestorm.ipaddr
+    $ipt = "{0}`nid{1}={2:X}`naddr{1}={3}" -f $ipt, $tableIndex, $ipid, $r.wyrestorm.ipaddr    
+
+    # Fixed Cams
+    $ipid = 0x07
+    for($i = 0; $i -lt $r.Fixed_Cams.length; $i++)
+    {
+        $ipid += $i
+        $tableIndex ++
+        $completeTable[$ipid] = $r.Fixed_Cams[$i].ipAddr 
+        $ipt = "{0}`nid{1}={2:X}`naddr{1}={3}" -f $ipt, $tableIndex, $ipid, $r.Fixed_Cams[$i].ipAddr    
+    }
+
+    # DSPs
+    $ipid = 0x0d
+    for($i = 0; $i -lt $r.DSPs.length; $i++)
+    {
+        $ipid += $i
+        $tableIndex ++
+        $completeTable[$ipid] = $r.DSPs[$i].ipAddr 
+        $ipt = "{0}`nid{1}={2:X}`naddr{1}={3}" -f $ipt, $tableIndex, $ipid, $r.DSPs[$i].ipAddr    
+    }
+
+    # FTR Recorders
+    $ipid = 0x18
+    for($i = 0; $i -lt $r.RecorderSvrs.length; $i++)
+    {
+        $tableIndex ++
+        $completeTable[$ipid+$i] = $r.RecorderSvrs[$i].ipAddr 
+        $ipt = "{0}`nid{1}={2:X}`naddr{1}={3}" -f $ipt, $tableIndex, $ipid+$i, $r.RecorderSvrs[$i].ipAddr
+    }
+        
+    # DVD Player
+    $ipid = 0x1a
+    $tableIndex ++
+    $completeTable[$ipid] = $r.DVD_Player.ipaddr 
+    $ipt = "{0}`nid{1}={2:X}`naddr{1}={3}" -f $ipt, $tableIndex, $ipid, $r.DVD_Player.ipaddr   
+         
+    # Mute Gateways
+    $ipid = 0x20
+    $tableIndex ++
+    $completeTable[$ipid] = $r.Mute_GW.ipaddr 
+    $ipt = "{0}`nid{1}={2:X}`naddr{1}={3}" -f $ipt, $tableIndex, $ipid, $r.Mute_GW.ipaddr         
+    
+    # PTZ Cams
+    $ipid = 0x23
+    for($i = 0; $i -lt $r.PTZ_Cams.length; $i++)
+    { 
+        $tableIndex ++
+        $completeTable[$ipid+$i] = $r.PTZ_Cams[$i].ipAddr 
+        $ipt = "{0}`nid{1}={2:X}`naddr{1}={3}" -f $ipt, $tableIndex, $ipid+$i, $r.PTZ_Cams[$i].ipAddr 
+
+        $ipid++
+
+        $tableIndex ++
+        $completeTable[$ipid+$i] = $r.PTZ_Cams[$i].ipAddr 
+        $ipt = "{0}`nid{1}={2:X}`naddr{1}={3}" -f $ipt, $tableIndex, $ipid+$i, $r.PTZ_Cams[$i].ipAddr     
+    }
+
+    $global:rooms[$target].$completeIPT = $completeTable
+
+    return $ipt
+}
+
+function fSendVC4IPT  ($targets)
+{
+    if(-not $targets)
+    {
+        fErr "PanelVTZ: No rooms were targeted." $true
+        return
+    }
+
+    foreach($target in $targets)
+    {
+        $ipt = $null
+        $dip = $null
+        $progSel = $null
+
+        $r = $global:rooms[$target]
+
+        if(-not $r.processor.isIPValid)
+        {
+            fErr ("VC4IPT: Invalid IP address for room {0}- {1}.`n    {2}" -f $target, $r.roomname, $r.processor.ipAddr) $true
+            continue 
+        }
+        elseif(-not $r.isVC4_System)
+        {
+            fErr ("VC4IPT: Processor in room {0}- {1} is not marked as a VC-4 server. `nIf this IS a VC-4 system, please mark the appropriate column in the .csv file with a `'1`'." -f $target, $r.roomname) $true
+            continue
+        }
+
+        # new SFTP session
+        $ip = [string]$r.processor.ipAddr
+        $usr = "ftr_admin"
+        $pw = "Fortherecord123!"
+        $spw = ConvertTo-SecureString -String $pw -AsPlainText -Force
+        $creds = New-Object System.Management.Automation.PSCredential($usr, $spw)
+        $sftp = New-SFTPSession -ComputerName $ip -Credential $creds
+
+        [System.Collections.ArrayList]$progs = get-sftpchilditem $s.sessionid /opt/crestron/virtualcontrol/RunningPrograms | Select-Object -ExpandProperty FullName | foreach { $_.split('/')[-1] }
+        $progs.remove("System")
+        if($progs.count -eq 0)
+        {
+            fErr ("VC4IPT: VC-4 server in {0}- {1} does not have any programs running. `nFrom the VC-4 web service, use the `'Add Room`' function." -f $target, $r.roomname) $true
+            Remove-SFTPSession $s.Session
+            continue
+        }
+        elseif($progs.count -gt 1)
+        {
+            #show the rooms and allow for input selection
+            fClear
+            $progSel = fSelectRunningProgramList $r.roomname $progs
+
+            if($progSel -is $null)
+            {
+                $sftp.Disconnect()
+                continue
+            }
+            else
+            {
+                $progSel --
+                $ipt = fGetDipFile($progs[$progSel], $sftp.SessionId)
+            }
+        }
+        else
+        {
+            $progSel = 0
+            $ipt = fGetDipFile($progs[$progSel], $sftp.SessionId)
+        }
+
+        if($ipt -is $null)
+        {
+            fErr ("VC4IPT: Couldn't find the IP table for room {0}- {1}, program `'{2}`'" -f $target, $r.roomname, $progs[$progSel]) $true
+            continue
+        }
+
+        $ipt = fVC4AppendIPT $ipt
+
+        if(-not $ipt -is $null)
+        {
+                
+        }
+
+
+
+        
+
+        
+        ##Get-SFTPItem -SessionId $sftp.SessionID -Path 
+        #Set-SFTPItem 
+        #Remove-SFTPSession
+
+
+        <#
+        write-host -f yellow "`nWhich panels do you want to load?`n"
+        write-host -f green "  1) TSW-10xx (the 10`" Clerk / Judge panels)"
+        write-host -f green "  2) TSW-7xx (the 7`" Counsel panels)`n"
+        #write-host -f green "  3) Both`n`n"
+
+        write-host -f green "  b) to go back`n"
+        $s = ""
+        #>
+    }
+
+
+
+
+
+
+
+    # Check if VC4?
+
+    # Connect to VC4 server
+
+    # poll the folder /opt/crestron/virtualcontrol/RunningPrograms/
+    # parse the list of subfolders
+    # remove the "/System" subfolder from our list
+    # If there is only 1 RunningProgram, verify via input that it is the correct one
+    # If >1, list the RunningPrograms, and allow input select
+    # 
+    # Once we have our target rooms:
+    # Copy the .dip file via ftp
+    # Check to be sure we aren't duplicating any entries
+    # Add the appropriate lines
+    # If successful, send back to the server via ftp, overwriting the existing file
+    
+    # On all-rooms complete, restart the service>   sudo systemctl restart virtualcontrol
+    
+     
+
+}
+
+
 # Get User Command
 ######################################################################################################
 
@@ -1543,6 +1881,7 @@ function getCommand
 
         continueScript
     }#>
+
     # Set Authentication Mode
     elseif($choice -ieq '6')
     {
@@ -1557,6 +1896,7 @@ function getCommand
 
         continueScript
     }
+
     # Get Device Status
     elseif($choice -ieq '7')
     {
@@ -1571,6 +1911,25 @@ function getCommand
 
         continueScript
     }
+
+    # Send VC-4 IPT
+    elseif($choice -ieq '9')
+    {
+        fClear
+        if(fFileLoaded)
+        {
+            fPrettyPrintRooms
+            write-host -f yellow -b black "`nSend VC-4 IP Table:"
+            fSendVC4IPT (fGetRangeOfRooms)
+        }
+        else
+        {
+            fLoadFileDirective
+        }
+
+        continueScript
+    }
+
     # Get Info
     elseif($choice -ieq 'i')
     {
@@ -1617,9 +1976,10 @@ function updateShell
     $data += "3) {0}`n" -f $global:menuFunctions[3]
     $data += "4) {0}`n" -f $global:menuFunctions[4]
     $data += "5) {0}`n" -f $global:menuFunctions[5]
-    $data += "6) {0}`n" -f $global:menuFunctions[6]
+    $data += "`n6) {0}`n" -f $global:menuFunctions[6]
     $data += "7) {0}`n" -f $global:menuFunctions[7]
     $data += "8) {0}`n" -f $global:menuFunctions[8]
+    $data += "`n9) {0}`n" -f $global:menuFunctions[9]
     Write-Host -f (shellTextColor $FileLoaded) $data
     
     $data  = "`ni) info`n"
@@ -1638,14 +1998,18 @@ function continueScript
 }
 
 
-$global:menuFunctions[1] = "Load .csv file"
-$global:menuFunctions[2] = "Load processor code"
-$global:menuFunctions[3] = "Send processor IP table"
-$global:menuFunctions[4] = "Load touch panel file"
-$global:menuFunctions[5] = "Send panel IP table"
-$global:menuFunctions[6] = "Set authentication"
-$global:menuFunctions[7] = "Get device status"
-$global:menuFunctions[8] = "Update firmware"
+$global:menuFunctions[1] = "Load .csv File"
+$global:menuFunctions[2] = "Load Processor Code"
+$global:menuFunctions[3] = "Send Processor IP Table"
+$global:menuFunctions[4] = "Load Touch Panel File"
+$global:menuFunctions[5] = "Send Panel IP Table"
+
+$global:menuFunctions[6] = "Set Authentication"
+$global:menuFunctions[7] = "Get Device Status"
+$global:menuFunctions[8] = "Update Firmware"
+
+$global:menuFunctions[9] = "Send VC-4 IP Table"
+
 
 
 
